@@ -1,0 +1,46 @@
+<idea-plugin>
+    <id>com.chiang.novelreader</id>
+    <name>墨遥·阅山行</name>
+    <vendor>C.Hiang</vendor>
+    <description><![CDATA[
+    在 IDE 里用 legado（阅读）书源看小说：工具窗阅读、登录、EPUB、老板键。
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="墨遥·阅山行" anchor="left" icon="AllIcons.Toolwindows.ToolWindowBookmarks"
+                    factoryClass="com.chiang.novelreader.ui.NovelToolWindowFactory"
+                    canCloseContents="false"/>
+        <statusBarWidgetFactory id="NovelReaderStatus"
+                                implementation="com.chiang.novelreader.ui.StatusWidgetFactory"/>
+        <applicationService serviceImplementation="com.chiang.novelreader.NovelApp"/>
+        <applicationConfigurable parentId="tools"
+                                 id="com.chiang.novelreader.settings"
+                                 displayName="墨遥·阅山行"
+                                 instance="com.chiang.novelreader.settings.AppSettingsConfigurable"/>
+    </extensions>
+
+    <actions>
+        <group id="NovelReaderActions" text="墨遥·阅山行" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="NovelReader.Search" class="com.chiang.novelreader.actions.SearchAction" text="搜索书籍"/>
+            <action id="NovelReader.BossKey" class="com.chiang.novelreader.actions.BossKeyAction" text="老板键（隐藏/恢复阅读）">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt B"/>
+            </action>
+            <separator/>
+            <action id="NovelReader.NextChapter" class="com.chiang.novelreader.actions.NextChapterAction" text="下一章">
+                <keyboard-shortcut keymap="$default" first-keystroke="alt RIGHT"/>
+            </action>
+            <action id="NovelReader.PrevChapter" class="com.chiang.novelreader.actions.PrevChapterAction" text="上一章">
+                <keyboard-shortcut keymap="$default" first-keystroke="alt LEFT"/>
+            </action>
+            <action id="NovelReader.NextLine" class="com.chiang.novelreader.actions.NextLineAction" text="下一行">
+                <keyboard-shortcut keymap="$default" first-keystroke="alt DOWN"/>
+            </action>
+            <action id="NovelReader.PrevLine" class="com.chiang.novelreader.actions.PrevLineAction" text="上一行">
+                <keyboard-shortcut keymap="$default" first-keystroke="alt UP"/>
+            </action>
+        </group>
+    </actions>
+</idea-plugin>
