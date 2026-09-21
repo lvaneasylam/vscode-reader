@@ -9,7 +9,7 @@ object BossKey {
     var hidden = false
         private set
 
-    private const val TOOL_WINDOW_ID = "墨遥·阅山行"
+    private const val TOOL_WINDOW_ID = "NovelReader"
 
     fun toggle(project: Project?) {
         hidden = !hidden

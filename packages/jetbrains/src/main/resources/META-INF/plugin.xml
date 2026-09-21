@@ -9,12 +9,14 @@
     <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="墨遥·阅山行" anchor="left" icon="AllIcons.Toolwindows.ToolWindowBookmarks"
+        <toolWindow id="NovelReader" displayName="墨遥·阅山行" anchor="left"
+                    icon="/icons/toolWindow.svg"
                     factoryClass="com.chiang.novelreader.ui.NovelToolWindowFactory"
                     canCloseContents="false"/>
         <statusBarWidgetFactory id="NovelReaderStatus"
                                 implementation="com.chiang.novelreader.ui.StatusWidgetFactory"/>
         <applicationService serviceImplementation="com.chiang.novelreader.NovelApp"/>
+        <applicationService serviceImplementation="com.chiang.novelreader.settings.AppSettings"/>
         <applicationConfigurable parentId="tools"
                                  id="com.chiang.novelreader.settings"
                                  displayName="墨遥·阅山行"

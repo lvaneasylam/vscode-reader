@@ -35,21 +35,52 @@ class NodeSidecar private constructor() {
     private fun dataDir(): File =
         PathManager.getConfigDir().resolve("novel-reader").toFile().apply { mkdirs() }
 
+    @Volatile private var cachedNode: String? = null
+
+    /** Node 探测：设置项 → 常见安装位 → 版本管理器（nvmd/nvm）目录 → PATH。结果缓存 */
     private fun nodeBinary(): String {
-        // 设置项优先（AppSettings.nodePath），其次常见路径与 PATH
+        cachedNode?.let { return it }
         val configured = com.chiang.novelreader.settings.AppSettings.instance.nodePath.trim()
-        if (configured.isNotEmpty()) return configured
-        val candidates = listOf(
+        if (configured.isNotEmpty() && File(configured).canExecute()) {
+            cachedNode = configured
+            return configured
+        }
+        val home = System.getenv("HOME") ?: System.getProperty("user.home") ?: ""
+        val fixed = listOf(
             "/opt/homebrew/bin/node",
             "/usr/local/bin/node",
             "/usr/bin/node",
-            System.getenv("HOME")?.let { "$it/.nvm/versions/current/bin/node" } ?: ""
-        ).filter { it.isNotEmpty() }
-        for (c in candidates) if (File(c).canExecute()) return c
+            if (home.isNotEmpty()) "$home/.volta/bin/node" else "",
+            if (home.isNotEmpty()) "$home/.fnm/current/bin/node" else ""
+        ).firstOrNull { it.isNotEmpty() && File(it).canExecute() }
+        if (fixed != null) {
+            cachedNode = fixed
+            return fixed
+        }
+        // 版本管理器目录：~/.nvmd/versions/<ver>/bin、~/.nvm/versions/node/<ver>/bin（取最大版本号）
+        val versionRoots = listOf(
+            if (home.isNotEmpty()) File(home, ".nvmd/versions") else null,
+            if (home.isNotEmpty()) File(home, ".nvm/versions/node") else null
+        ).filterNotNull()
+        for (root in versionRoots) {
+            val found = root.listFiles()
+                ?.filter { it.isDirectory }
+                ?.map { File(it, "bin/node") }
+                ?.filter { it.canExecute() }
+                ?.maxByOrNull { it.parentFile?.name ?: "" }
+            if (found != null) {
+                cachedNode = found.absolutePath
+                return found.absolutePath
+            }
+        }
         val fromPath = System.getenv("PATH")?.split(':')?.firstNotNullOfOrNull { p ->
             File(p, "node").takeIf { it.canExecute() }?.absolutePath
         }
-        return fromPath ?: "node"
+        if (fromPath != null) {
+            cachedNode = fromPath
+            return fromPath
+        }
+        return "node" // 交给 ensureProcess 包装成可读错误
     }
 
     private fun extractSidecar(): File {
@@ -70,9 +101,19 @@ class NodeSidecar private constructor() {
     private fun ensureProcess(): Process {
         process?.takeIf { it.isAlive }?.let { return it }
         val sidecarFile = extractSidecar()
-        val pb = ProcessBuilder(nodeBinary(), sidecarFile.absolutePath, "--data-dir", dataDir().absolutePath)
+        val node = nodeBinary()
+        val pb = ProcessBuilder(node, sidecarFile.absolutePath, "--data-dir", dataDir().absolutePath)
         pb.redirectErrorStream(false)
-        val proc = pb.start()
+        val proc = try {
+            pb.start()
+        } catch (e: Exception) {
+            cachedNode = null
+            throw IllegalStateException(
+                "无法启动 Node.js（尝试路径：$node）。GUI 启动的 IDE 不继承终端 PATH，" +
+                    "请在 设置 → 工具 → 墨遥·阅山行 显式配置 Node.js 路径（终端执行 which node 可得）",
+                e
+            )
+        }
         writer = proc.outputStream.bufferedWriter()
         val readerThread = Thread({
             BufferedReader(InputStreamReader(proc.inputStream, Charsets.UTF_8)).useLines { lines ->
@@ -110,15 +151,17 @@ class NodeSidecar private constructor() {
         return proc
     }
 
-    /** 发起 RPC 请求；sidecar 崩溃时自动重启重试一次 */
+    /** 发起 RPC 请求；首次调用启动 sidecar 进程，崩溃自动重启重试一次 */
     fun call(method: String, params: Map<String, Any?>): JsonObject {
         var firstError: Exception? = null
         repeat(2) { attempt ->
             try {
+                ensureProcess() // 确保进程与 writer 就绪（此前漏接：writer 恒 null 导致「sidecar 未运行」）
                 return callOnce(method, params)
             } catch (e: IllegalStateException) {
                 firstError = e
                 // 进程死亡：清理并让下次 ensureProcess 重启
+                writer = null
                 process?.destroyForcibly()
                 process = null
                 if (attempt == 1) throw e

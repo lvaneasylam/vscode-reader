@@ -11,7 +11,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.ui.Messages
 
 /** 导入书源 JSON（文件选择，支持合集；与 VSCode 版 importSource 等价） */
-class ImportSourcesAction : AnAction("导入书源"), DumbAware {
+class ImportSourcesAction : AnAction("导入书源", "导入书源 JSON（支持合集）", com.intellij.openapi.util.IconLoader.getIcon("/icons/importSources.svg", ImportSourcesAction::class.java)), DumbAware {
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
     override fun actionPerformed(e: AnActionEvent) {
         val desc = FileChooserDescriptor(true, false, false, false, false, true)

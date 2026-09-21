@@ -11,8 +11,12 @@ import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.ui.Messages
 
+import com.intellij.openapi.util.IconLoader
+
+private fun nrIcon(path: String) = IconLoader.getIcon(path, SearchAction::class.java)
+
 /** 搜索书籍：选源 → 输关键字 → 结果 → 进书架并阅读 */
-class SearchAction : AnAction(), DumbAware {
+class SearchAction : AnAction("搜索书籍", "搜索并加入书架", nrIcon("/icons/search.svg")), DumbAware {
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
     override fun actionPerformed(e: AnActionEvent) {
         SearchDialog(NovelApp.instance, e.project).show()
@@ -20,7 +24,7 @@ class SearchAction : AnAction(), DumbAware {
 }
 
 /** 导入 EPUB */
-class ImportEpubAction : AnAction("导入 EPUB"), DumbAware {
+class ImportEpubAction : AnAction("导入 EPUB", "导入本地 EPUB 电子书", nrIcon("/icons/importEpub.svg")), DumbAware {
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
     override fun actionPerformed(e: AnActionEvent) {
         val desc = FileChooserDescriptor(true, false, false, false, false, true)
@@ -61,7 +65,7 @@ class ImportEpubAction : AnAction("导入 EPUB"), DumbAware {
 }
 
 /** 书源登录（表单 / token 直登 / Cookie） */
-class LoginAction : AnAction("书源登录"), DumbAware {
+class LoginAction : AnAction("书源登录", "表单 / token 直登 / Cookie", nrIcon("/icons/login.svg")), DumbAware {
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
     override fun actionPerformed(e: AnActionEvent) {
         LoginDialog(NovelApp.instance, e.project).show()
@@ -69,7 +73,7 @@ class LoginAction : AnAction("书源登录"), DumbAware {
 }
 
 /** 老板键：隐藏/恢复工具窗与状态栏 widget */
-class BossKeyAction : AnAction("老板键（隐藏/恢复阅读）"), DumbAware {
+class BossKeyAction : AnAction("老板键（隐藏/恢复阅读）", "Ctrl+Alt+B", nrIcon("/icons/bossKey.svg")), DumbAware {
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
     override fun actionPerformed(e: AnActionEvent) {
         com.chiang.novelreader.ui.BossKey.toggle(e.project)

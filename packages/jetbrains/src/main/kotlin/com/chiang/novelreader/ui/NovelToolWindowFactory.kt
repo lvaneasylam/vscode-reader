@@ -25,14 +25,16 @@ class NovelToolWindowFactory : ToolWindowFactory, DumbAware {
         )
 
         // 工具栏动作：搜索 / 导入书源 / 导入 EPUB / 登录 / 老板键
-        val group = DefaultActionGroup().apply {
-            add(ActionManager.getInstance().getAction("NovelReader.Search"))
-            add(com.chiang.novelreader.actions.ImportSourcesAction())
-            add(com.chiang.novelreader.actions.ImportEpubAction())
-            add(com.chiang.novelreader.actions.LoginAction())
-            addSeparator()
-            add(com.intellij.openapi.actionSystem.ActionManager.getInstance().getAction("NovelReader.BossKey"))
-        }
-        toolWindow.setTitleActions(group.getChildren(null).toList())
+        //（不手动展开 DefaultActionGroup——平台禁止 getChildren(null)）
+        val am = ActionManager.getInstance()
+        toolWindow.setTitleActions(
+            listOfNotNull(
+                am.getAction("NovelReader.Search"),
+                com.chiang.novelreader.actions.ImportSourcesAction(),
+                com.chiang.novelreader.actions.ImportEpubAction(),
+                com.chiang.novelreader.actions.LoginAction(),
+                am.getAction("NovelReader.BossKey")
+            )
+        )
     }
 }
