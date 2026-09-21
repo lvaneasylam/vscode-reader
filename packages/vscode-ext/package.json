@@ -1,0 +1,342 @@
+{
+  "name": "novel-reader",
+  "displayName": "墨遥·阅山行（legado 书源）",
+  "publisher": "c-hiang-dev",
+  "version": "0.1.19",
+  "description": "在 VSCode 内用 legado 自定义书源看小说：底部面板 / 状态栏双模式阅读",
+  "license": "GPL-3.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "novelReader.searchBook",
+        "title": "搜索书籍",
+        "category": "墨遥·阅山行",
+        "icon": "$(search)"
+      },
+      {
+        "command": "novelReader.importSourceFromFile",
+        "title": "导入书源（本地文件）",
+        "category": "墨遥·阅山行",
+        "icon": "$(add)"
+      },
+      {
+        "command": "novelReader.importSourceFromUrl",
+        "title": "导入书源（URL）",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.importSourceFromClipboard",
+        "title": "导入书源（剪贴板）",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.manageSources",
+        "title": "管理书源",
+        "category": "墨遥·阅山行",
+        "icon": "$(library)"
+      },
+      {
+        "command": "novelReader.checkSources",
+        "title": "校验书源（批量检测可用性）",
+        "category": "墨遥·阅山行",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "novelReader.exportSources",
+        "title": "导出书源（启用的源为 JSON）",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.sourceLogin",
+        "title": "书源登录（表单）",
+        "category": "墨遥·阅山行",
+        "icon": "$(account)"
+      },
+      {
+        "command": "novelReader.setSourceCookie",
+        "title": "书源登录（设置 Cookie）",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.nextChapter",
+        "title": "下一章",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.prevChapter",
+        "title": "上一章",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.selectChapter",
+        "title": "选择章节",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.nextLine",
+        "title": "下一行（状态栏模式）",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.prevLine",
+        "title": "上一行（状态栏模式）",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.switchLocation",
+        "title": "切换阅读位置（面板/状态栏）",
+        "category": "墨遥·阅山行"
+      },
+      {
+        "command": "novelReader.selectFontFile",
+        "title": "选择正文字体文件…",
+        "category": "墨遥·阅山行",
+        "icon": "$(file-font)"
+      },
+      {
+        "command": "novelReader.openSettings",
+        "title": "插件设置（外观/字体/行为/登录）",
+        "category": "墨遥·阅山行",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "novelReader.removeShelfBook",
+        "title": "从书架移除",
+        "category": "墨遥·阅山行",
+        "icon": "$(close)"
+      },
+      {
+        "command": "novelReader.refreshToc",
+        "title": "刷新目录（重新请求章节列表）",
+        "category": "墨遥·阅山行",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "novelReader",
+          "title": "墨遥·阅山行",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "novelReader": [
+        {
+          "type": "tree",
+          "id": "novelReader.toolbar",
+          "name": "设置栏"
+        },
+        {
+          "type": "tree",
+          "id": "novelReader.shelf",
+          "name": "书架"
+        },
+        {
+          "type": "webview",
+          "id": "novelReader.sidebar",
+          "name": "阅读",
+          "visibility": "visible"
+        }
+      ],
+      "panels": [
+        {
+          "type": "webview",
+          "id": "novelReader.panel",
+          "name": "墨遥·阅山行"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "novelReader.shelf",
+        "contents": "书架还没有书籍。\n[搜索书籍加入书架](command:novelReader.searchBook)\n若还没有书源：[导入书源文件](command:novelReader.importSourceFromFile) · [从 URL 导入](command:novelReader.importSourceFromUrl) · [管理书源](command:novelReader.manageSources)"
+      }
+    ],
+    "configuration": {
+      "title": "墨遥·阅山行",
+      "properties": {
+        "novelReader.readLocation": {
+          "type": "string",
+          "default": "panel",
+          "enum": [
+            "panel",
+            "sidebar",
+            "statusBar"
+          ],
+          "enumDescriptions": [
+            "底部面板（多行阅读）",
+            "左侧插件栏（活动栏书本图标 → 阅读，与书架并列）",
+            "状态栏单行（最隐蔽）"
+          ],
+          "description": "章节正文的展示位置"
+        },
+        "novelReader.fontSize": {
+          "type": "number",
+          "default": 15,
+          "minimum": 10,
+          "maximum": 40,
+          "description": "面板正文字号（px；状态栏模式跟随 VSCode 字体设置）"
+        },
+        "novelReader.lineHeight": {
+          "type": "number",
+          "default": 1.9,
+          "minimum": 1.2,
+          "maximum": 3,
+          "description": "面板正文行高（倍数）"
+        },
+        "novelReader.contentWidth": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "面板正文最大宽度（px，0 = 撑满面板；超出部分居中显示，仿书页排版）"
+        },
+        "novelReader.fontFamily": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "正文字体名（本机已安装的字体，如 `霞鹜文楷`、`Sarasa Mono SC`；留空跟随 VSCode）。配合「字体文件」使用时，此处填写字体内部名称"
+        },
+        "novelReader.fontFile": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "自定义字体文件路径（.ttf / .otf / .woff2，本地文件加载进阅读面板；优先于「正文字体名」）。推荐用命令 [选择正文字体文件…](command:novelReader.selectFontFile) 选取，也可在此手动填写绝对路径。仅面板模式生效"
+        },
+        "novelReader.backgroundColor": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "阅读界面背景色（如 `#f5f0e1` 米黄护眼、`#1e1e1e` 纯黑；留空跟随 VSCode 主题深浅色）"
+        },
+        "novelReader.foregroundColor": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "阅读界面文字色（如 `#3a3a3a`；留空跟随 VSCode 主题深浅色）"
+        },
+        "novelReader.tokenFieldName": {
+          "type": "string",
+          "default": "token",
+          "markdownDescription": "token 直登写入的 Cookie 字段名（不同书源的登录字段各不相同，按所用书源填写，如 `token`、`sid`）。也可在直登输入框直接粘贴完整 `字段名=值` 临时覆盖"
+        },
+        "novelReader.autoNextChapter": {
+          "type": "boolean",
+          "default": true,
+          "description": "翻行到章末时自动进入下一章（Alt+↑ 到章首时自动回到上一章末尾）"
+        },
+        "novelReader.statusBarWidth": {
+          "type": "number",
+          "default": 80,
+          "minimum": 20,
+          "maximum": 300,
+          "description": "状态栏单行模式的显示宽度（半角字符数，中文算 2）。超长行自动分段，Alt+↓ 逐段读完，避免右侧被截断"
+        },
+        "novelReader.contentCacheSize": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "maximum": 200,
+          "description": "章节正文内存缓存数量（已读章节免重复请求；调大占内存，调小多请求）"
+        },
+        "novelReader.preloadChapters": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 20,
+          "description": "向后预加载章节数（如设 3：读第 2 章时后台预取第 3/4/5 章，翻章零等待；0 = 关闭。受「章节缓存数量」约束，缓存不足时优先保留正在读的章节）"
+        },
+        "novelReader.requestTimeoutMs": {
+          "type": "number",
+          "default": 15000,
+          "description": "书源请求超时（毫秒）"
+        },
+        "novelReader.insecureTLS": {
+          "type": "boolean",
+          "default": true,
+          "description": "信任所有 HTTPS 证书并允许旧版 TLS（与 legado 阅读器行为一致；大量小说站使用自签/过期证书，关闭后将无法访问）"
+        },
+        "novelReader.loginInfo": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "书源登录信息（按书源名分组，字段名与书源 `loginUi` 一致）。首次在表单登录时输入并自动保存，之后登录全自动；也可在此手动编辑。例：`{\"🔅聚合书源(26.8.28)\": {\"邮箱\": \"a@b.com\", \"密码\": \"xxx\"}}`\n\n登录与书源管理入口：[书源登录](command:novelReader.sourceLogin) · [Cookie/token 管理](command:novelReader.setSourceCookie) · [管理书源](command:novelReader.manageSources) · [校验书源](command:novelReader.checkSources) · [导入书源](command:novelReader.importSourceFromFile)",
+          "additionalProperties": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "novelReader.removeShelfBook",
+          "when": "view == novelReader.shelf && viewItem == book",
+          "group": "inline@2"
+        },
+        {
+          "command": "novelReader.refreshToc",
+          "when": "view == novelReader.shelf && viewItem == book",
+          "group": "inline@1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "novelReader.searchBook",
+          "when": "view == novelReader.shelf",
+          "group": "navigation@1"
+        },
+        {
+          "command": "novelReader.refreshToc",
+          "when": "view == novelReader.shelf",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "novelReader.nextChapter",
+        "key": "alt+right",
+        "when": "novelReader.reading"
+      },
+      {
+        "command": "novelReader.prevChapter",
+        "key": "alt+left",
+        "when": "novelReader.reading"
+      },
+      {
+        "command": "novelReader.nextLine",
+        "key": "alt+down",
+        "when": "novelReader.reading"
+      },
+      {
+        "command": "novelReader.prevLine",
+        "key": "alt+up",
+        "when": "novelReader.reading"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --format=cjs --target=node16 --sourcemap",
+    "watch": "npm run compile -- --watch",
+    "typecheck": "tsc -p . --noEmit",
+    "vsce:package": "vsce package --no-dependencies",
+    "vsce:install": "npm run typecheck && npm run compile && vsce package --no-dependencies && \"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code\" --install-extension novel-reader-$npm_package_version.vsix --force"
+  },
+  "dependencies": {
+    "book-source-engine": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}
