@@ -46,6 +46,35 @@ export interface WebBookOptions {
 /** 分页防死循环上限 */
 const MAX_PAGES = 50
 
+/**
+ * 解析书源 exploreUrl 为分类列表：
+ * - JSON 对象字符串（legado 标准）：{"男生":"/all?...", "女生":"/all?..."}
+ * - 行式「名称::URL」多段
+ * - 单值退化为单一「发现」分类
+ */
+export function parseExploreEntries(exploreUrl: string | undefined): Array<{ name: string; url: string }> {
+  if (!exploreUrl?.trim()) return []
+  const t = exploreUrl.trim()
+  try {
+    const obj: unknown = JSON.parse(t)
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      return Object.entries(obj as Record<string, unknown>)
+        .filter(([, v]) => typeof v === 'string' && v.trim())
+        .map(([name, url]) => ({ name, url: String(url).trim() }))
+    }
+  } catch {
+    /* 非 JSON 继续尝试其他形态 */
+  }
+  if (t.includes('::')) {
+    return t
+      .split('\n')
+      .map(line => line.split('::'))
+      .filter(parts => parts.length >= 2 && parts[0].trim() && parts[1].trim())
+      .map(parts => ({ name: parts[0].trim(), url: parts[1].trim() }))
+  }
+  return [{ name: '发现', url: t }]
+}
+
 /** 源变量中的登录表单数据键（getLoginInfoMap 读取） */
 const LOGIN_INFO_KEY = '__loginInfo__'
 
@@ -101,21 +130,40 @@ export class WebBook {
 
   private async searchBooksInner(key: string, page: number): Promise<SearchBook[]> {
     const res = await this.fetch(this.source.searchUrl!, { key, page })
-    const rule = this.newRule(res.body, res.url, { key, page })
+    return this.listBooks(res.body, res.url, this.source.ruleSearch ?? {}, { key, page })
+  }
+
+  /**
+   * 发现页（legado exploreUrl + ruleExplore）：按分类 URL 规则取书。
+   * exploreUrlRule 来自 parseExploreEntries 解析结果。
+   */
+  async exploreBooks(exploreUrlRule: string, page = 1): Promise<SearchBook[]> {
+    const res = await this.fetch(exploreUrlRule, { page })
+    return this.listBooks(res.body, res.url, this.source.ruleExplore ?? {}, { page })
+  }
+
+  /** 列表页通用解析（搜索/发现共用；ruleDef 为 ruleSearch/ruleExplore 形态） */
+  private async listBooks(
+    body: string,
+    url: string,
+    ruleDef: NonNullable<BookSource['ruleSearch']>,
+    vars: Record<string, unknown>
+  ): Promise<SearchBook[]> {
+    const rule = this.newRule(body, url, vars)
 
     // 详情页正则命中：结果按详情页解析（对齐 BookList.getInfoItem 分支）
     const pattern = this.source.bookUrlPattern
     if (pattern) {
       try {
-        if (new RegExp(pattern).test(res.url)) {
-          return this.searchAsInfoPage(rule, res.url)
+        if (new RegExp(pattern).test(url)) {
+          return this.searchAsInfoPage(rule, url)
         }
       } catch {
         /* 非法正则忽略 */
       }
     }
 
-    let bookListRule = this.source.ruleSearch?.bookList ?? ''
+    let bookListRule = ruleDef.bookList ?? ''
     let reverse = false
     if (bookListRule.startsWith('-')) {
       reverse = true
@@ -125,28 +173,27 @@ export class WebBook {
 
     const elements = (await rule.getElements(bookListRule)) as AnyNode[]
     if (elements.length === 0 && !pattern) {
-      return this.searchAsInfoPage(rule, res.url)
+      return this.searchAsInfoPage(rule, url)
     }
 
-    const ruleSearch = this.source.ruleSearch ?? {}
     const books: SearchBook[] = []
     const seen = new Set<string>()
     for (const el of elements) {
       rule.setContentItem(el)
-      const name = clean(await rule.getString(ruleSearch.name ?? ''))
+      const name = clean(await rule.getString(ruleDef.name ?? ''))
       if (!name) continue
-      let bookUrl = (await rule.getString(ruleSearch.bookUrl ?? '', { isUrl: true })) ?? ''
-      if (!bookUrl) bookUrl = res.url
+      let bookUrl = (await rule.getString(ruleDef.bookUrl ?? '', { isUrl: true })) ?? ''
+      if (!bookUrl) bookUrl = url
       if (seen.has(bookUrl)) continue
       seen.add(bookUrl)
       books.push({
         name,
-        author: clean(await rule.getString(ruleSearch.author ?? '')) || '佚名',
+        author: clean(await rule.getString(ruleDef.author ?? '')) || '佚名',
         bookUrl,
-        intro: clean(await rule.getString(ruleSearch.intro ?? '')),
-        kind: clean(await rule.getString(ruleSearch.kind ?? '')),
-        lastChapter: clean(await rule.getString(ruleSearch.lastChapter ?? '')),
-        coverUrl: (await rule.getString(ruleSearch.coverUrl ?? '', { isUrl: true })) ?? '',
+        intro: clean(await rule.getString(ruleDef.intro ?? '')),
+        kind: clean(await rule.getString(ruleDef.kind ?? '')),
+        lastChapter: clean(await rule.getString(ruleDef.lastChapter ?? '')),
+        coverUrl: (await rule.getString(ruleDef.coverUrl ?? '', { isUrl: true })) ?? '',
         origin: this.source.bookSourceUrl,
         originName: this.source.bookSourceName
       })

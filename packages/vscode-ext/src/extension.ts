@@ -16,6 +16,8 @@ import { StatusNav } from './ui/status-nav.js'
 import { ToolbarView } from './ui/toolbar-view.js'
 import { initSourceState } from './source-state.js'
 import { createWebBook } from './webbook-factory.js'
+import { readEpubMeta } from 'book-source-engine'
+import type { ShelfBook } from 'book-source-engine'
 
 export function activate(ctx: vscode.ExtensionContext): void {
   // 书源 JS 的 detached 异步操作安全网（fire-and-forget 的 Promise 失败不应影响扩展宿主）
@@ -96,6 +98,22 @@ export function activate(ctx: vscode.ExtensionContext): void {
     void vscode.window.showInformationMessage(tip[next])
   }
 
+  /** 老板键：一键隐藏/恢复全部阅读界面（context key 控制视图 when + 状态栏 hide） */
+  let bossHidden = false
+  function toggleBossKey(): void {
+    bossHidden = !bossHidden
+    void vscode.commands.executeCommand('setContext', 'novelReader.bossHidden', bossHidden)
+    if (bossHidden) {
+      statusReader.hide()
+      void vscode.window.showInformationMessage('🙈 阅读已隐藏，再按一次老板键恢复')
+      return
+    }
+    const loc = readLocation()
+    if (loc === 'statusBar') statusReader.show()
+    else if (loc === 'sidebar') sidebarPanel.reveal()
+    else panel.reveal()
+  }
+
   applyLocation()
 
   ctx.subscriptions.push(
@@ -161,7 +179,47 @@ export function activate(ctx: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('novelReader.openShelfBook', (bookUrl: string) =>
       openBookAndJump(bookUrl)
     ),
+    // 导入本地 EPUB：解析元数据/目录 → 入书架（origin=local，正文懒读取文件）
+    vscode.commands.registerCommand('novelReader.importEpub', async () => {
+      const picked = await vscode.window.showOpenDialog({
+        canSelectMany: true,
+        openLabel: '导入书架',
+        filters: { 'EPUB 电子书': ['epub'] }
+      })
+      if (!picked || picked.length === 0) return
+      let added = 0
+      let lastUrl = ''
+      for (const file of picked) {
+        try {
+          const meta = await readEpubMeta(file.fsPath)
+          const chapters = meta.toc.map((t, i) => ({ title: t.title, url: t.href, index: i }))
+          const shelfBook: ShelfBook = {
+            bookUrl: `epub://${file.fsPath}`,
+            name: meta.name,
+            author: meta.author,
+            tocUrl: 'epub',
+            origin: 'local',
+            originName: 'EPUB 本地书',
+            chapterIndex: 0
+          }
+          await store.addToShelf(shelfBook)
+          await store.saveToc(shelfBook.bookUrl, chapters)
+          added++
+          lastUrl = shelfBook.bookUrl
+        } catch (e) {
+          void vscode.window.showWarningMessage(
+            `导入失败 ${file.path.split('/').pop()}：${(e as Error).message.slice(0, 80)}`
+          )
+        }
+      }
+      if (added > 0) {
+        tree.refresh()
+        void vscode.window.showInformationMessage(`已导入 ${added} 本 EPUB`)
+        await openBookAndJump(lastUrl)
+      }
+    }),
     vscode.commands.registerCommand('novelReader.selectChapter', selectChapter),
+    vscode.commands.registerCommand('novelReader.toggleBossKey', toggleBossKey),
     vscode.commands.registerCommand('novelReader.nextChapter', () => controller.nextChapter()),
     vscode.commands.registerCommand('novelReader.prevChapter', () => controller.prevChapter()),
     vscode.commands.registerCommand('novelReader.nextLine', () => controller.nextLine()),

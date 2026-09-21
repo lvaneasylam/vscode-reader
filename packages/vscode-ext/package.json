@@ -2,8 +2,8 @@
   "name": "novel-reader",
   "displayName": "墨遥·阅山行（legado 书源）",
   "publisher": "c-hiang-dev",
-  "version": "0.1.19",
-  "description": "在 VSCode 内用 legado 自定义书源看小说：底部面板 / 状态栏双模式阅读",
+  "version": "0.2.0",
+  "description": "在 VSCode 内用 legado 书源看小说：侧边栏/底部面板/状态栏三模式阅读，token 登录、EPUB 本地书、老板键",
   "license": "GPL-3.0",
   "engines": {
     "vscode": "^1.80.0"
@@ -120,6 +120,18 @@
         "title": "刷新目录（重新请求章节列表）",
         "category": "墨遥·阅山行",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "novelReader.toggleBossKey",
+        "title": "老板键（一键隐藏/恢复阅读界面）",
+        "category": "墨遥·阅山行",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "novelReader.importEpub",
+        "title": "导入 EPUB（本地电子书）",
+        "category": "墨遥·阅山行",
+        "icon": "$(file-add)"
       }
     ],
     "viewsContainers": {
@@ -147,14 +159,16 @@
           "type": "webview",
           "id": "novelReader.sidebar",
           "name": "阅读",
-          "visibility": "visible"
+          "visibility": "visible",
+          "when": "!novelReader.bossHidden"
         }
       ],
       "panels": [
         {
           "type": "webview",
           "id": "novelReader.panel",
-          "name": "墨遥·阅山行"
+          "name": "墨遥·阅山行",
+          "when": "!novelReader.bossHidden"
         }
       ]
     },
@@ -293,9 +307,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "novelReader.refreshToc",
+          "command": "novelReader.importEpub",
           "when": "view == novelReader.shelf",
           "group": "navigation@2"
+        },
+        {
+          "command": "novelReader.refreshToc",
+          "when": "view == novelReader.shelf",
+          "group": "navigation@3"
         }
       ]
     },
@@ -319,6 +338,12 @@
         "command": "novelReader.prevLine",
         "key": "alt+up",
         "when": "novelReader.reading"
+      },
+      {
+        "command": "novelReader.toggleBossKey",
+        "key": "ctrl+alt+b",
+        "mac": "cmd+alt+b",
+        "when": "novelReader.reading"
       }
     ]
   },
@@ -338,5 +363,25 @@
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.24.0",
     "typescript": "^5.6.0"
+  },
+  "icon": "media/icon.png",
+  "author": "c-hiang",
+  "keywords": [
+    "novel",
+    "reading",
+    "legado",
+    "book",
+    "epub",
+    "小说",
+    "阅读",
+    "书源"
+  ],
+  "homepage": "https://github.com/lvaneasylam/vscode-reader#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lvaneasylam/vscode-reader.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lvaneasylam/vscode-reader/issues"
   }
 }

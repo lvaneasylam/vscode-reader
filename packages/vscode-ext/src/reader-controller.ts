@@ -5,7 +5,9 @@ import {
   describeErrorChain,
   type BookSource,
   type ShelfBook,
-  type BookChapter
+  type BookChapter,
+  readEpubMeta,
+  readEpubChapter
 } from 'book-source-engine'
 import { createWebBook } from './webbook-factory.js'
 
@@ -81,6 +83,28 @@ export class ReaderController implements vscode.Disposable {
 
   /** 打开书架书籍：加载目录并跳到上次进度 */
   async openBook(book: ShelfBook): Promise<void> {
+    // 本地 EPUB：不走书源（bookUrl = epub://绝对路径），目录与书源共用同一套缓存
+    if (book.origin === 'local') {
+      this.state = { ...EMPTY_STATE, book, loading: true }
+      this.emitter.fire()
+      try {
+        let chapters = this.tocStore?.get(book.bookUrl) ?? []
+        if (chapters.length === 0) {
+          const meta = await readEpubMeta(book.bookUrl.slice('epub://'.length))
+          chapters = meta.toc.map((t, i) => ({ title: t.title, url: t.href, index: i }))
+          if (chapters.length === 0) throw new Error('目录为空')
+          void this.tocStore?.save(book.bookUrl, chapters)
+        }
+        const index = Math.min(Math.max(book.chapterIndex, 0), chapters.length - 1)
+        this.state.chapters = chapters
+        await this.loadChapter(index)
+      } catch (e) {
+        this.state.loading = false
+        this.state.error = describeError(e)
+        this.emitter.fire()
+      }
+      return
+    }
     const source = this.getSource(book.origin)
     if (!source) {
       this.state = { ...EMPTY_STATE, book, error: `书源不存在或已删除：${book.originName}` }
@@ -238,8 +262,11 @@ export class ReaderController implements vscode.Disposable {
     const { book, chapters } = this.state
     if (!book) return
     const chapter = chapters[index]
-    const source = this.getSource(book.origin)
-    if (!chapter || !source) return
+    if (!chapter) return
+    // 本地 EPUB：无书源，直接读文件章节
+    const isLocal = book.origin === 'local'
+    const source = isLocal ? undefined : this.getSource(book.origin)
+    if (!isLocal && !source) return
 
     const cached = this.contentCache.get(chapter.url)
     this.state.loading = !cached
@@ -249,8 +276,12 @@ export class ReaderController implements vscode.Disposable {
     let content = cached
     if (!content) {
       try {
-        const nextUrl = chapters[index + 1]?.url
-        content = await this.webbookOf(source).getContent(chapter.url, { nextChapterUrl: nextUrl })
+        if (isLocal) {
+          content = await readEpubChapter(book.bookUrl.slice('epub://'.length), '', chapter.url)
+        } else {
+          const nextUrl = chapters[index + 1]?.url
+          content = await this.webbookOf(source!).getContent(chapter.url, { nextChapterUrl: nextUrl })
+        }
         this.cacheContent(chapter.url, content)
       } catch (e) {
         this.state.loading = false
