@@ -103,5 +103,3 @@ npm run vsce:install          # typecheck + compile + 打包 + 安装到本机 V
 ## 许可
 
 [GPL-3.0](./LICENSE)
-
-GPL-3.0 © C.Hiang
