@@ -28,7 +28,7 @@ class ImportEpubAction : AnAction("导入 EPUB"), DumbAware {
         FileChooser.chooseFiles(desc, e.project, null) { files ->
             if (files.isEmpty()) return@chooseFiles
             val app = NovelApp.instance
-            app.execute(onDone = { res: Result<Pair<Int, String> ->
+            app.execute(onDone = { res: Result<Pair<Int, String>> ->
                 res.fold(onSuccess = {
                     Messages.showInfoMessage("已导入 ${it.first} 本 EPUB：${it.second}", "墨遥·阅山行")
                     app.controller.openBook(com.chiang.novelreader.data.ShelfBook(bookUrl = "epub://${files[0].path}", name = it.second, origin = "local", originName = "EPUB 本地书"))

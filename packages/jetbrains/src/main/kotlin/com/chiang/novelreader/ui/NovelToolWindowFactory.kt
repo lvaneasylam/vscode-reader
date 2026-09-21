@@ -24,14 +24,15 @@ class NovelToolWindowFactory : ToolWindowFactory, DumbAware {
             contentFactory.createContent(shelf, "书架", true)
         )
 
-        // 工具栏动作：搜索 / 导入 EPUB / 登录 / 设置
+        // 工具栏动作：搜索 / 导入书源 / 导入 EPUB / 登录 / 老板键
         val group = DefaultActionGroup().apply {
             add(ActionManager.getInstance().getAction("NovelReader.Search"))
+            add(com.chiang.novelreader.actions.ImportSourcesAction())
             add(com.chiang.novelreader.actions.ImportEpubAction())
             add(com.chiang.novelreader.actions.LoginAction())
             addSeparator()
             add(com.intellij.openapi.actionSystem.ActionManager.getInstance().getAction("NovelReader.BossKey"))
         }
-        toolWindow.setTitleActions(group)
+        toolWindow.setTitleActions(group.getChildren(null).toList())
     }
 }

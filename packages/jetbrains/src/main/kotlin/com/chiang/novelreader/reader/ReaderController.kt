@@ -258,7 +258,7 @@ class ReaderController(private val app: NovelApp) {
             var cur = StringBuilder()
             var w = 0
             for (ch in line) {
-                val cw = if (ch.codePointAt(0) > 0xff) 2 else 1
+                val cw = if (ch.code > 0xff) 2 else 1
                 if (w + cw > maxWidth - 1 && cur.isNotEmpty()) {
                     cur.append('…')
                     segs.add(cur)

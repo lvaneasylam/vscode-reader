@@ -26,7 +26,15 @@ sourceSets {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
+    compilerOptions {
+        // sinceBuild 233 的 JBR 是 17：字节码目标保持 17（编译用本机 JDK 21）
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+tasks.withType<JavaCompile> {
+    options.release.set(17)
 }
 
 intellijPlatform {

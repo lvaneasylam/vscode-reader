@@ -33,7 +33,7 @@ class NodeSidecar private constructor() {
     }
 
     private fun dataDir(): File =
-        File(PathManager.getPluginDir(), "novel-reader").apply { mkdirs() }
+        PathManager.getConfigDir().resolve("novel-reader").toFile().apply { mkdirs() }
 
     private fun nodeBinary(): String {
         // 设置项优先（AppSettings.nodePath），其次常见路径与 PATH

@@ -9,7 +9,7 @@ import java.io.File
 /** 书源/书架/目录缓存的 JSON 持久化（插件数据目录，与 sidecar state.json 同级） */
 class Store {
     private val gson = Gson()
-    private val dir: File get() = File(File(PathManager.getPluginDir(), "novel-reader")).apply { mkdirs() }
+    private val dir: File get() = PathManager.getConfigDir().resolve("novel-reader").toFile().apply { mkdirs() }
 
     // ---------- 书源 ----------
 

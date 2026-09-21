@@ -1,7 +1,6 @@
 package com.chiang.novelreader.settings
 
 import com.intellij.ui.components.JBTextField
-import com.intellij.ui.dsl.builder.cell
 import com.intellij.ui.dsl.builder.panel
 import javax.swing.JComponent
 
