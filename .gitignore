@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out/
+*.vsix
+*.map
+.DS_Store
+# 本地个人数据（书源文件不入库）
+*.txt
+!docs/**/*.txt

@@ -1,0 +1,13 @@
+{
+  "name": "novel-reader-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test -w book-source-engine",
+    "compile:ext": "npm run build -w book-source-engine && npm run compile -w novel-reader",
+    "smoke:ext": "npm run compile:ext && node packages/vscode-ext/scripts/smoke.js"
+  }
+}
