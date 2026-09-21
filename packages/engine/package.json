@@ -1,0 +1,24 @@
+{
+  "name": "book-source-engine",
+  "version": "0.1.1",
+  "description": "legado 书源引擎的平台无关 TypeScript 实现（规则解析/URL构造/搜索→目录→正文流程）",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "acorn": "^8.18.0",
+    "cheerio": "^1.0.0",
+    "domhandler": "^5.0.3",
+    "jsonpath-plus": "^10.0.0",
+    "undici": "^7.29.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

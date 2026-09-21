@@ -1,0 +1,17 @@
+// book-source-engine 公共 API
+export const ENGINE_NAME = 'book-source-engine'
+
+export * from './types.js'
+export { parseBookSource, parseBookSources, checkUnsupported } from './source-loader.js'
+export type { ParseSourceResult } from './source-loader.js'
+export { AnalyzeRule, UnsupportedRuleError, toAbsoluteUrl } from './rule/analyze-rule.js'
+export type { JsEvalFn, RuleEvalContext } from './rule/analyze-rule.js'
+export { analyzeUrl } from './analyze-url.js'
+export type { BuiltUrl, UrlOption, AnalyzeUrlCtx } from './analyze-url.js'
+export { requestText, createDefaultFetch, describeErrorChain, LEGADO_DEFAULT_HEADERS, LEGADO_DEFAULT_UA } from './http.js'
+export type { HttpResponse, HttpOptions, FetchLike } from './http.js'
+export { WebBook, ContentEmptyError } from './webbook.js'
+export type { BookInfoResult, WebBookOptions } from './webbook.js'
+export { evalJsAsync } from './js/js-runtime.js'
+export { createJavaExtensions } from './js/js-extensions.js'
+export { formatContent } from './html-formatter.js'
