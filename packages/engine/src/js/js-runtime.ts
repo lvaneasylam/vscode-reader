@@ -67,6 +67,8 @@ export async function evalJsAsync(
     cache: opts.cache,
     toast: opts.toast,
     openExternal: opts.openExternal,
+    // androidId 持久化设备指纹（java.androidId 走源变量存储）
+    variables: opts.variables,
     // java.ajax 的 {{...}} 求值递归走完整沙盒（携带外层 ctx 变量如 key/result）
     evalJs: (code: string) => evalJsAsync(code, ctx, opts)
   })

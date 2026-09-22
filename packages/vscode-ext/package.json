@@ -2,7 +2,7 @@
   "name": "novel-reader",
   "displayName": "墨遥·阅山行（legado 书源）",
   "publisher": "c-hiang-dev",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "在 VSCode 内用 legado 书源看小说：侧边栏/底部面板/状态栏三模式阅读，token 登录、EPUB 本地书、老板键",
   "license": "GPL-3.0",
   "engines": {
@@ -132,6 +132,12 @@
         "title": "导入 EPUB（本地电子书）",
         "category": "墨遥·阅山行",
         "icon": "$(file-add)"
+      },
+      {
+        "command": "novelReader.locateChapter",
+        "title": "定位当前章节（目录滚动到正在读的章节）",
+        "category": "墨遥·阅山行",
+        "icon": "$(target)"
       }
     ],
     "viewsContainers": {
@@ -147,11 +153,6 @@
       "novelReader": [
         {
           "type": "tree",
-          "id": "novelReader.toolbar",
-          "name": "设置栏"
-        },
-        {
-          "type": "tree",
           "id": "novelReader.shelf",
           "name": "书架"
         },
@@ -161,6 +162,16 @@
           "name": "阅读",
           "visibility": "visible",
           "when": "!novelReader.bossHidden"
+        },
+        {
+          "type": "tree",
+          "id": "novelReader.explore",
+          "name": "发现"
+        },
+        {
+          "type": "tree",
+          "id": "novelReader.toolbar",
+          "name": "设置栏"
         }
       ],
       "panels": [
@@ -307,14 +318,19 @@
           "group": "navigation@1"
         },
         {
-          "command": "novelReader.importEpub",
+          "command": "novelReader.locateChapter",
           "when": "view == novelReader.shelf",
           "group": "navigation@2"
         },
         {
-          "command": "novelReader.refreshToc",
+          "command": "novelReader.importEpub",
           "when": "view == novelReader.shelf",
           "group": "navigation@3"
+        },
+        {
+          "command": "novelReader.refreshToc",
+          "when": "view == novelReader.shelf",
+          "group": "navigation@4"
         }
       ]
     },

@@ -128,6 +128,48 @@ export class WebBook {
     }
   }
 
+  /**
+   * 0. 发现页分类列表（exploreUrl 三形态统一入口）：
+   * - `<js>...</js>` 动态生成：沙盒执行（含 jsLib prelude，可发网络请求拉取服务器分类）
+   * - JSON 对象字符串：{"分类名": "URL"}
+   * - 行式「名称::URL」/ 单值退化
+   */
+  async getExploreEntries(): Promise<Array<{ name: string; url: string }>> {
+    const raw = this.source.exploreUrl?.trim()
+    if (!raw) return []
+    // <js> 形态：沙盒执行，返回 JSON 数组 [{name, url}] 或对象 {name: url}
+    const jsMatch = /^<js>([\s\S]*?)<\/js>$/.exec(raw)
+    if (jsMatch) {
+      const out = await this.evalJs(jsMatch[1], {})
+      if (!out) return []
+      try {
+        const parsed: unknown = JSON.parse(out)
+        if (Array.isArray(parsed)) {
+          // legado 标准：{title, url}（部分源用 name）；无 url 的条目是设置项，跳过
+          return parsed
+            .map((e): { name: string; url: string } | null => {
+              if (typeof e !== 'object' || e === null) return null
+              const rec = e as Record<string, unknown>
+              const name = typeof rec.title === 'string' ? rec.title : typeof rec.name === 'string' ? rec.name : null
+              const url = typeof rec.url === 'string' ? rec.url : null
+              if (!name || !url || !url.trim()) return null
+              return { name, url: url.trim() }
+            })
+            .filter((e): e is { name: string; url: string } => e !== null)
+        }
+        if (parsed && typeof parsed === 'object') {
+          return Object.entries(parsed as Record<string, unknown>)
+            .filter(([, v]) => typeof v === 'string' && v.trim())
+            .map(([name, url]) => ({ name, url: String(url).trim() }))
+        }
+      } catch {
+        /* JS 返回非法 JSON：按文本退化 */
+      }
+      return [{ name: '发现', url: out.trim() }]
+    }
+    return parseExploreEntries(raw)
+  }
+
   private async searchBooksInner(key: string, page: number): Promise<SearchBook[]> {
     const res = await this.fetch(this.source.searchUrl!, { key, page })
     return this.listBooks(res.body, res.url, this.source.ruleSearch ?? {}, { key, page })

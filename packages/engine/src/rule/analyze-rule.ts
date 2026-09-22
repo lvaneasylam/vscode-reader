@@ -249,16 +249,17 @@ export class AnalyzeRule {
   private async replaceJs(rule: string): Promise<string> {
     if (!rule.includes('{{')) return rule
     return replaceInnerRule(rule, async code => {
-      // {{$.field}} 形态是「当前内容上的 JSONPath」（书源生态惯例），非 JS 表达式；
-      // 直接当 JS 执行会因 $ 未定义而抛错（此前炸掉整条搜索）
+      // {{$.field}} 形态是「当前内容上的 JSONPath」（书源生态惯例），非 JS 表达式。
+      // 即使路径未命中（对象缺该字段）也返回空串，不走 JS 执行（$ 未定义会炸整条链路）
       const t = code.trim()
       if (/^\$(\$|\.)/.test(t) && !/[;=(]|=>|\bfunction\b/.test(t) && this.isJsonValue()) {
         try {
           const v = jsonGetString(this.getJson(), t)
           if (v !== null) return v
         } catch {
-          /* 内容非 JSON 或路径未命中：落回 JS 求值 */
+          /* JSON 解析异常走空串 */
         }
+        return ''
       }
       return this.evalJs(code, this.ruleCtx)
     })

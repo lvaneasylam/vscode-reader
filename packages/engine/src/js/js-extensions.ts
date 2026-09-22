@@ -33,6 +33,8 @@ export interface JavaExtensions {
   base64ToStr(s: string): string
   setCookie(url: string, cookie: string): void
   getCookie(url: string): string
+  /** 设备指纹（书源 java.androidId()；聚合服务用它注册游客设备，获取番茄等源的游客凭证） */
+  androidId(): string
   toast(msg: string): void
   longToast(msg: string): void
   /** 打开浏览器页（移动端 WebView；桌面端经 openExternal 回调用系统浏览器） */
@@ -52,6 +54,8 @@ export function createJavaExtensions(opts: {
   cookies?: CookieStore
   /** 书源 KV 缓存（java.put/get 单参形态，跨规则传值如 book_id） */
   cache?: { put(key: string, value: string): void; get(key: string): string | undefined }
+  /** 源变量（java.androidId 持久化设备指纹用） */
+  variables?: { get(key: string): string | undefined; set(key: string, value: string): void }
   /** URL 内 {{...}} 求值通道（js-runtime 注入，携带外层 ctx 变量） */
   evalJs?: (code: string) => Promise<string | null>
   /** 弹窗提示桥（桌面端接 IDE 通知） */
@@ -151,6 +155,17 @@ export function createJavaExtensions(opts: {
     },
     getCookie(url) {
       return opts.cookies?.get(url) ?? ''
+    },
+    androidId() {
+      // 稳定设备指纹：书源 request() 用它拼 cookie deviceId=...，
+      // 聚合服务器据此注册游客设备（获取番茄等下游源的游客凭证）
+      const cached = opts.variables?.get('__androidId__')
+      if (cached) return cached
+      const id = Array.from({ length: 18 }, () =>
+        'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]
+      ).join('')
+      opts.variables?.set('__androidId__', id)
+      return id
     },
     toast(msg) {
       ;(opts.toast ?? ((m: string) => console.log(m)))(String(msg), false)

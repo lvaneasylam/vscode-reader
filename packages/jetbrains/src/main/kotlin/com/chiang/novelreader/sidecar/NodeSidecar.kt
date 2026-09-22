@@ -122,7 +122,9 @@ class NodeSidecar private constructor() {
                     try {
                         val obj = gson.fromJson(line, JsonObject::class.java)
                         if (obj.has("id")) {
+                            log.info("[sidecar] 响应行 id=${obj.get("id").asLong} ok=${obj.get("ok")?.asBoolean} 长度=${line.length}")
                             pending.remove(obj.get("id").asLong)?.complete(obj)
+                                ?: log.warn("[sidecar] 响应无匹配请求: id=${obj.get("id").asLong}（pending=${pending.keys}）")
                         } else if (obj.has("event")) {
                             val ev = obj.get("event").asString
                             val data = obj.get("data")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
@@ -175,6 +177,7 @@ class NodeSidecar private constructor() {
         val future = CompletableFuture<JsonObject>()
         pending[id] = future
         val req = gson.toJson(mapOf("id" to id, "method" to method, "params" to params))
+        val t0 = System.currentTimeMillis()
         try {
             synchronized(writeLock) {
                 val w = writer ?: throw IllegalStateException("sidecar 未运行")
@@ -186,7 +189,15 @@ class NodeSidecar private constructor() {
             pending.remove(id)
             throw IllegalStateException("sidecar 写入失败: ${e.message}")
         }
-        return future.get(3, TimeUnit.MINUTES)
+        log.info("[sidecar] → #$id $method (${req.length} 字节)")
+        try {
+            val res = future.get(3, TimeUnit.MINUTES)
+            log.info("[sidecar] ← #$id $method 耗时 ${System.currentTimeMillis() - t0}ms")
+            return res
+        } catch (e: java.util.concurrent.TimeoutException) {
+            log.warn("[sidecar] ✗ #$id $method 超时（3 分钟无响应；pending=${pending.size}）")
+            throw IllegalStateException("sidecar 响应超时: $method")
+        }
     }
 
     fun shutdown() {

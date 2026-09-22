@@ -16,8 +16,9 @@ import { StatusNav } from './ui/status-nav.js'
 import { ToolbarView } from './ui/toolbar-view.js'
 import { initSourceState } from './source-state.js'
 import { createWebBook } from './webbook-factory.js'
+import { ExploreTree } from './tree/explore-tree.js'
 import { readEpubMeta } from 'book-source-engine'
-import type { ShelfBook } from 'book-source-engine'
+import type { ShelfBook, SearchBook } from 'book-source-engine'
 
 export function activate(ctx: vscode.ExtensionContext): void {
   // 书源 JS 的 detached 异步操作安全网（fire-and-forget 的 Promise 失败不应影响扩展宿主）
@@ -34,6 +35,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     { get: bookUrl => store.getToc(bookUrl), save: (bookUrl, chapters) => void store.saveToc(bookUrl, chapters) }
   )
   const tree = new ChaptersTree(store, controller)
+  const exploreTree = new ExploreTree(() => store.getSources())
   const panel = new ReaderPanel(controller, ReaderPanel.VIEW_ID)
   const sidebarPanel = new ReaderPanel(controller, ReaderPanel.SIDEBAR_VIEW_ID)
   const statusReader = new StatusReader(controller)
@@ -114,6 +116,9 @@ export function activate(ctx: vscode.ExtensionContext): void {
     else panel.reveal()
   }
 
+  // 书架树视图（reveal API 需 createTreeView 而非 registerTreeDataProvider）
+  const shelfView = vscode.window.createTreeView('novelReader.shelf', { treeDataProvider: tree })
+
   applyLocation()
 
   ctx.subscriptions.push(
@@ -124,6 +129,18 @@ export function activate(ctx: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(ReaderPanel.SIDEBAR_VIEW_ID, sidebarPanel),
     vscode.window.createTreeView('novelReader.toolbar', { treeDataProvider: new ToolbarView() }),
     vscode.window.registerTreeDataProvider('novelReader.shelf', tree),
+    vscode.window.createTreeView(ExploreTree.VIEW_ID, { treeDataProvider: exploreTree, canSelectMany: false }),
+    // 锚点定位：滚动书架树到正在读的章节（缓存优先 → 引用一致 → reveal 滚动）
+    vscode.commands.registerCommand('novelReader.locateChapter', async () => {
+      const state = controller.getState()
+      if (!state.book) {
+        void vscode.window.showInformationMessage('还没有打开的书籍')
+        return
+      }
+      const el = tree.getChapterElement(state.book.bookUrl, state.chapterIndex)
+      if (!el) return
+      await shelfView.reveal(el, { select: true, focus: true, expand: true })
+    }),
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('novelReader.readLocation')) applyLocation()
     }),
@@ -179,6 +196,30 @@ export function activate(ctx: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('novelReader.openShelfBook', (bookUrl: string) =>
       openBookAndJump(bookUrl)
     ),
+    // 发现页：点击书 → 取详情（tocUrl）→ 入书架 → 打开阅读
+    vscode.commands.registerCommand('novelReader.openExploreBook', async (sourceUrl: string, book: SearchBook) => {
+      const source = store.getSources().find(s => s.bookSourceUrl === sourceUrl)
+      if (!source) return
+      let tocUrl = book.bookUrl
+      try {
+        const info = await createWebBook(source).getBookInfo(book.bookUrl)
+        tocUrl = info.tocUrl
+      } catch {
+        /* 详情失败仍可按详情页当目录页 */
+      }
+      const shelfBook: ShelfBook = {
+        bookUrl: book.bookUrl,
+        name: book.name,
+        author: book.author || '佚名',
+        tocUrl,
+        origin: book.origin,
+        originName: book.originName,
+        chapterIndex: 0
+      }
+      await store.addToShelf(shelfBook)
+      tree.refresh()
+      await openBookAndJump(shelfBook.bookUrl)
+    }),
     // 导入本地 EPUB：解析元数据/目录 → 入书架（origin=local，正文懒读取文件）
     vscode.commands.registerCommand('novelReader.importEpub', async () => {
       const picked = await vscode.window.showOpenDialog({
