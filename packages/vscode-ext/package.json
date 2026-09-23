@@ -2,7 +2,7 @@
   "name": "novel-reader",
   "displayName": "墨遥·阅山行",
   "publisher": "c-hiang-dev",
-  "version": "0.2.1",
+  "version": "0.2.8",
   "description": "在 VSCode 内用书源看小说：\n• 三模式阅读：侧边栏 / 底部面板 / 状态栏\n• Token 登录：接入需认证的书源\n• EPUB 本地书：导入即读\n• 老板键：一键隐藏阅读界面",
   "license": "GPL-3.0",
   "engines": {
