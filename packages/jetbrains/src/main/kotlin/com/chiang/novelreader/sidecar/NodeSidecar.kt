@@ -37,14 +37,22 @@ class NodeSidecar private constructor() {
 
     @Volatile private var cachedNode: String? = null
 
-    /** Node 探测：设置项 → 常见安装位 → 版本管理器（nvmd/nvm）目录 → PATH。结果缓存 */
+    /** Node 探测：设置项 → 常见安装位 → 版本管理器（nvmd/nvm）目录 → PATH。结果缓存（设置变更时失效） */
+    @Volatile private var cachedNodeFromConfig = ""
     private fun nodeBinary(): String {
-        cachedNode?.let { return it }
         val configured = com.chiang.novelreader.settings.AppSettings.instance.nodePath.trim()
-        if (configured.isNotEmpty() && File(configured).canExecute()) {
-            cachedNode = configured
-            return configured
+        if (configured.isNotEmpty()) {
+            if (File(configured).canExecute()) {
+                cachedNode = configured
+                cachedNodeFromConfig = configured
+                return configured
+            }
+        } else if (cachedNodeFromConfig.isNotEmpty()) {
+            // 用户清空了显式配置：作废缓存重新探测
+            cachedNode = null
+            cachedNodeFromConfig = ""
         }
+        cachedNode?.let { return it }
         val home = System.getenv("HOME") ?: System.getProperty("user.home") ?: ""
         val fixed = listOf(
             "/opt/homebrew/bin/node",
@@ -102,7 +110,12 @@ class NodeSidecar private constructor() {
         process?.takeIf { it.isAlive }?.let { return it }
         val sidecarFile = extractSidecar()
         val node = nodeBinary()
-        val pb = ProcessBuilder(node, sidecarFile.absolutePath, "--data-dir", dataDir().absolutePath)
+        val pb = ProcessBuilder(
+            node, sidecarFile.absolutePath,
+            "--data-dir", dataDir().absolutePath,
+            "--insecure-tls", if (com.chiang.novelreader.settings.AppSettings.instance.insecureTLS) "1" else "0",
+            "--timeout-ms", com.chiang.novelreader.settings.AppSettings.instance.requestTimeoutMs.coerceAtLeast(3000).toString()
+        )
         pb.redirectErrorStream(false)
         val proc = try {
             pb.start()
@@ -190,13 +203,15 @@ class NodeSidecar private constructor() {
             throw IllegalStateException("sidecar 写入失败: ${e.message}")
         }
         log.info("[sidecar] → #$id $method (${req.length} 字节)")
-        try {
+        return try {
             val res = future.get(3, TimeUnit.MINUTES)
             log.info("[sidecar] ← #$id $method 耗时 ${System.currentTimeMillis() - t0}ms")
-            return res
+            res
         } catch (e: java.util.concurrent.TimeoutException) {
+            // 超时是业务慢（慢书源），保持原样抛出：不触发 call() 的进程重启重试（避免 3min×2 卡死）
+            pending.remove(id)
             log.warn("[sidecar] ✗ #$id $method 超时（3 分钟无响应；pending=${pending.size}）")
-            throw IllegalStateException("sidecar 响应超时: $method")
+            throw RuntimeException("sidecar 响应超时: $method（书源过慢或网络不通）")
         }
     }
 

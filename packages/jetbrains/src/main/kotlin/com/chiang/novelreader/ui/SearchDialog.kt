@@ -93,26 +93,12 @@ class SearchDialog(private val app: NovelApp, project: Project?) : DialogWrapper
 
     private fun openSelected() {
         val hit = resultList.selectedValue ?: return
-        val sourceJson = app.store.loadSources().find { it.url == hit.origin }?.json ?: return
-        app.execute(onDone = { res: Result<ShelfBook> ->
-            res.fold(
-                onSuccess = { book ->
-                    app.store.addToShelf(book)
-                    close(OK_EXIT_CODE)
-                    app.controller.openBook(book)
-                },
-                onFailure = { setErrorText(it.message) }
-            )
-        }) {
-            val tocUrl = try {
-                app.rpc("getBookInfo", mapOf("source" to sourceJson, "bookUrl" to hit.bookUrl))
-                    .getAsJsonObject("result")?.getAsJsonPrimitive("tocUrl")?.asString
-            } catch (_: Exception) { null } ?: hit.bookUrl
-            ShelfBook(
-                bookUrl = hit.bookUrl, name = hit.name, author = hit.author,
-                tocUrl = tocUrl, origin = hit.origin, originName = hit.originName
-            )
-        }
+        close(OK_EXIT_CODE)
+        app.addAndOpen(
+            name = hit.name, author = hit.author, bookUrl = hit.bookUrl,
+            origin = hit.origin, originName = hit.originName,
+            onDone = { res -> res.onFailure { setErrorText(it.message) } }
+        )
     }
 
     private fun com.google.gson.JsonObject.str(key: String): String =

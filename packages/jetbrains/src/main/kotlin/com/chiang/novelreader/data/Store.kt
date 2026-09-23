@@ -11,20 +11,40 @@ class Store {
     private val gson = Gson()
     private val dir: File get() = PathManager.getConfigDir().resolve("novel-reader").toFile().apply { mkdirs() }
 
+    /** 损坏 JSON 的读取保护：解析失败把文件改名为 *.corrupt 备份后返回 null（自愈，避免每次启动都崩） */
+    private fun readJsonFile(name: String, parse: (String) -> Any?): Any? {
+        val f = File(dir, name)
+        if (!f.exists()) return null
+        return try {
+            f.readText().let { if (it.isBlank()) null else parse(it) }
+        } catch (e: Exception) {
+            val backup = File(dir, "$name.corrupt")
+            f.copyTo(backup, overwrite = true)
+            f.delete()
+            null
+        }
+    }
+
+    private fun writeJsonFile(name: String, json: String) {
+        try {
+            File(dir, name).writeText(json)
+        } catch (_: Exception) { /* 写盘失败不致命（内存态仍有效） */ }
+    }
+
     // ---------- 书源 ----------
 
     fun loadSources(): MutableList<SourceEntry> {
-        val f = File(dir, "sources.json")
-        if (!f.exists()) return mutableListOf()
-        val text = f.readText()
-        val arr = gson.fromJson(text, com.google.gson.JsonArray::class.java) ?: return mutableListOf()
+        @Suppress("UNCHECKED_CAST")
+        val arr = readJsonFile("sources.json") {
+            gson.fromJson(it, com.google.gson.JsonArray::class.java)
+        } as? com.google.gson.JsonArray ?: return mutableListOf()
         return arr.map { SourceEntry(it.asJsonObject) }.toMutableList()
     }
 
     fun saveSources(list: List<SourceEntry>) {
         val arr = com.google.gson.JsonArray()
         list.forEach { arr.add(it.json) }
-        File(dir, "sources.json").writeText(gson.toJson(arr))
+        writeJsonFile("sources.json", gson.toJson(arr))
     }
 
     /** 合并导入（按 bookSourceUrl 去重，更新计数） */
@@ -42,17 +62,32 @@ class Store {
         return added to updated
     }
 
+    /** 清除指定书的目录缓存（「刷新目录」用，下次 openBook 重新请求） */
+    fun clearToc(bookUrl: String) {
+        val f = File(dir, "toc.json")
+        if (!f.exists()) return
+        val type = object : TypeToken<MutableMap<String, List<Chapter>>>() {}.type
+        @Suppress("UNCHECKED_CAST")
+        val map = (readJsonFile("toc.json") {
+            gson.fromJson<MutableMap<String, List<Chapter>>>(it, type)
+        } as? MutableMap<String, List<Chapter>>) ?: return
+        map.remove(tocKey(bookUrl))
+        try {
+            f.writeText(gson.toJson(map))
+        } catch (_: Exception) { /* 忽略 */ }
+    }
+
     // ---------- 书架 ----------
 
     fun loadShelf(): MutableList<ShelfBook> {
-        val f = File(dir, "shelf.json")
-        if (!f.exists()) return mutableListOf()
         val type = object : TypeToken<MutableList<ShelfBook>>() {}.type
-        return gson.fromJson(f.readText(), type) ?: mutableListOf()
+        @Suppress("UNCHECKED_CAST")
+        return readJsonFile("shelf.json") { gson.fromJson<MutableList<ShelfBook>>(it, type) }
+            as? MutableList<ShelfBook> ?: mutableListOf()
     }
 
     fun saveShelf(list: List<ShelfBook>) {
-        File(dir, "shelf.json").writeText(gson.toJson(list))
+        writeJsonFile("shelf.json", gson.toJson(list))
     }
 
     fun addToShelf(book: ShelfBook) {
@@ -76,20 +111,25 @@ class Store {
     // ---------- 目录缓存（bookUrl hash → 章节） ----------
 
     fun loadToc(bookUrl: String): List<Chapter> {
-        val f = File(dir, "toc.json")
-        if (!f.exists()) return emptyList()
         val type = object : TypeToken<MutableMap<String, List<Chapter>>>() {}.type
-        val map: MutableMap<String, List<Chapter>> = gson.fromJson(f.readText(), type) ?: return emptyList()
+        @Suppress("UNCHECKED_CAST")
+        val map = readJsonFile("toc.json") {
+            gson.fromJson<MutableMap<String, List<Chapter>>>(it, type)
+        } as? Map<String, List<Chapter>> ?: return emptyList()
         return map[tocKey(bookUrl)] ?: emptyList()
     }
 
     fun saveToc(bookUrl: String, chapters: List<Chapter>) {
         val f = File(dir, "toc.json")
         val type = object : TypeToken<MutableMap<String, List<Chapter>>>() {}.type
-        val map: MutableMap<String, List<Chapter>> =
-            if (f.exists()) gson.fromJson(f.readText(), type) ?: mutableMapOf() else mutableMapOf()
+        @Suppress("UNCHECKED_CAST")
+        val map = (readJsonFile("toc.json") {
+            gson.fromJson<MutableMap<String, List<Chapter>>>(it, type)
+        } as? MutableMap<String, List<Chapter>>) ?: mutableMapOf()
         map[tocKey(bookUrl)] = chapters
-        f.writeText(gson.toJson(map))
+        try {
+            f.writeText(gson.toJson(map))
+        } catch (_: Exception) { /* 写盘失败不致命 */ }
     }
 
     private fun tocKey(bookUrl: String): String =

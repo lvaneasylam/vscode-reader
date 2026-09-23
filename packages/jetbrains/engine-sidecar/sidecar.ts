@@ -54,6 +54,9 @@ function scheduleFlush(): void {
 
 const webbooks = new Map<string, WebBook>()
 
+/** 运行时网络选项（宿主 setOption 可改；改动后清空实例池重建生效） */
+const globalOpts = { insecureTLS: true, timeoutMs: 20000 }
+
 function webbookOf(source: BookSource): WebBook {
   const hit = webbooks.get(source.bookSourceUrl)
   if (hit) return hit
@@ -64,8 +67,8 @@ function webbookOf(source: BookSource): WebBook {
   const wb = new WebBook(source, {
     cookieJar: cookies,
     sourceVariables: variables,
-    insecureTLS: true,
-    timeoutMs: 20000,
+    insecureTLS: globalOpts.insecureTLS,
+    timeoutMs: globalOpts.timeoutMs,
     toast: (msg: string) => emit('toast', msg),
     log: (msg: string) => emit('log', msg)
   })
@@ -136,10 +139,21 @@ async function dispatch(req: Req): Promise<unknown> {
       return wb!.runJs(String(p.code ?? ''))
     case 'getLoginUi':
       return source ? String(source.loginUi ?? '') : ''
+    case 'parseExplore':
+      // 必须走 WebBook.getExploreEntries()（沙盒执行 <js> 动态生成分类）——
+      // 静态版 parseExploreEntries 对 <js> 形态会把整段 JS 原文当分类 URL 返回
+      return wb ? wb.getExploreEntries() : []
+    case 'exploreBooks':
+      return wb!.exploreBooks(String(p.exploreUrl ?? ''), Number(p.page ?? 1))
     case 'readEpubMeta':
       return readEpubMeta(String(p.filePath ?? ''))
     case 'readEpubChapter':
       return readEpubChapter(String(p.filePath ?? ''), '', String(p.href ?? ''))
+    case 'setOption':
+      if (typeof p.insecureTLS === 'boolean') globalOpts.insecureTLS = p.insecureTLS
+      if (typeof p.timeoutMs === 'number' && p.timeoutMs >= 3000) globalOpts.timeoutMs = Math.floor(p.timeoutMs)
+      webbooks.clear() // 实例池按旧选项构造：清空后下次调用重建
+      return true
     case 'flush':
       if (source) snapshot(source)
       try {
@@ -159,6 +173,20 @@ async function dispatch(req: Req): Promise<unknown> {
 function main(): void {
   const idx = process.argv.indexOf('--data-dir')
   dataDir = idx >= 0 ? process.argv[idx + 1] : path.join(process.cwd(), 'novel-reader-data')
+  // 启动参数携带的网络选项（宿主设置项初始值）
+  const argBool = (name: string): boolean | undefined => {
+    const i = process.argv.indexOf(name)
+    return i >= 0 ? process.argv[i + 1] === '1' : undefined
+  }
+  const argNum = (name: string): number | undefined => {
+    const i = process.argv.indexOf(name)
+    const v = i >= 0 ? Number(process.argv[i + 1]) : NaN
+    return Number.isFinite(v) ? v : undefined
+  }
+  const tls = argBool('--insecure-tls')
+  if (tls !== undefined) globalOpts.insecureTLS = tls
+  const tms = argNum('--timeout-ms')
+  if (tms !== undefined && tms >= 3000) globalOpts.timeoutMs = tms
   loadState()
 
   const rl = createInterface({ input: process.stdin })

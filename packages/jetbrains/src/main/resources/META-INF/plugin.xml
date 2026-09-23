@@ -3,7 +3,22 @@
     <name>墨遥·阅山行</name>
     <vendor>C.Hiang</vendor>
     <description><![CDATA[
-    在 IDE 里用 legado（阅读）书源看小说：工具窗阅读、登录、EPUB、老板键。
+    在 IDE 里用书源看小说的摸鱼插件。
+
+    【功能】
+    • 工具窗三页：书架（章节树，双击直达章节）/ 阅读（当前行高亮逐行读）/ 发现页（分类书单）
+    • 书源：本地文件 / URL / 剪贴板导入，表单 / 凭据直登（token/uid/session 多字段一次配齐）/ Cookie 三种登录，EPUB 本地书
+    • 鼠标交互：单击正文行定位当前行、滚轮滚动自动跟随、翻页按钮翻章
+    • 快捷键：Alt+→/← 翻章，Alt+↓/↑ 翻行；老板键 Ctrl+Alt+B（Mac ⌘⌥B）一键隐藏/恢复
+    • 章节目录与正文均有本地缓存，翻章零等待；支持后台预加载
+
+    【设置入口（重要）】
+    Settings → Tools → 墨遥·阅山行（⌘, 打开设置后搜索「墨遥」）
+    外观（字号/行高/宽度/字体/颜色）、行为（自动翻章/缓存/预加载）、
+    网络（请求超时/信任证书）、运行时（Node 路径）共 16 项。
+
+    【运行要求】
+    本机需安装 Node.js（自动探测 homebrew/volta/nvm/fnm；找不到时到上述设置页手动指定路径，终端执行 which node 可得）。
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -27,6 +42,9 @@
         <group id="NovelReaderActions" text="墨遥·阅山行" popup="true">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
             <action id="NovelReader.Search" class="com.chiang.novelreader.actions.SearchAction" text="搜索书籍"/>
+            <action id="NovelReader.ImportSources" class="com.chiang.novelreader.actions.ImportSourcesAction" text="导入书源（本地文件）"/>
+            <action id="NovelReader.ImportSourcesUrl" class="com.chiang.novelreader.actions.ImportSourcesFromUrlAction" text="导入书源（URL）"/>
+            <action id="NovelReader.ImportSourcesClipboard" class="com.chiang.novelreader.actions.ImportSourcesFromClipboardAction" text="导入书源（剪贴板）"/>
             <action id="NovelReader.BossKey" class="com.chiang.novelreader.actions.BossKeyAction" text="老板键（隐藏/恢复阅读）">
                 <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt B"/>
             </action>

@@ -41,6 +41,11 @@ export class ReaderPanel implements vscode.WebviewViewProvider {
     view.webview.onDidReceiveMessage(msg => {
       if (msg?.type === 'prev') void this.controller.prevChapter()
       if (msg?.type === 'next') void this.controller.nextChapter()
+      if (msg?.type === 'jumpLine' && Number.isInteger(msg.i)) {
+        // 点击行定位：仅切高亮，不滚动页面（Alt+↓ 翻行仍保留滚动跟随）
+        this.noScrollOnce = msg.noScroll === true
+        this.controller.jumpLine(msg.i)
+      }
     })
     this.render()
   }
@@ -85,6 +90,8 @@ export class ReaderPanel implements vscode.WebviewViewProvider {
 
   private renderSeq = 0
   private lastLineIndex = 0
+  /** 下一次 setCur 只移动高亮不滚动（点击行定位触发） */
+  private noScrollOnce = false
   private render(): void {
     if (!this.view) return
     const s = this.controller.getState()
@@ -101,7 +108,9 @@ export class ReaderPanel implements vscode.WebviewViewProvider {
     // 仅翻行：轻量消息移动高亮并滚动跟随（避免整页刷新丢滚动位置）
     const dir = s.lineIndex >= this.lastLineIndex ? 'down' : 'up'
     this.lastLineIndex = s.lineIndex
-    void this.view.webview.postMessage({ type: 'setCur', i: s.lineIndex, dir })
+    const noScroll = this.noScrollOnce
+    this.noScrollOnce = false
+    void this.view.webview.postMessage({ type: 'setCur', i: s.lineIndex, dir, noScroll })
   }
 
   private async renderFull(
@@ -110,22 +119,25 @@ export class ReaderPanel implements vscode.WebviewViewProvider {
     seq: number
   ): Promise<void> {
     if (!this.view) return
-    // 先立即渲染：加载条/骨架屏/正文第一时间可见，不被图片代理阻塞
+    // 首屏立即渲染：缓存命中的段评图直接显示，未命中的渲染 💬 占位
     const imgUrls = extractImgMarks(s.lines)
-    if (imgUrls.length === 0) {
-      this.view.webview.html = renderReaderHtml(s, look)
-      return
+    const cached: Record<string, string> = {}
+    const pending: string[] = []
+    for (const u of imgUrls) {
+      const hit = this.controller.peekImage(u)
+      if (hit) cached[u] = hit
+      else pending.push(u)
     }
-    this.view.webview.html = renderReaderHtml(s, look, {})
-    // 段评图代理完成后二次渲染补图（webview <img> 无登录态，由扩展宿主拉取转 data URI）
-    const imgCache: Record<string, string> = {}
+    this.view.webview.html = renderReaderHtml(s, look, cached)
+    // 段评图代理拉取（webview <img> 无登录态，由扩展宿主拉取转 data URI）完成后，
+    // 用 imgReady 消息局部替换占位——不整页重设 HTML，用户滚动位置不受影响
+    if (pending.length === 0) return
     const results = await Promise.all(
-      imgUrls.map(async u => [u, await this.controller.fetchChapterImage(u)] as const)
+      pending.map(async u => [u, await this.controller.fetchChapterImage(u)] as const)
     )
-    for (const [u, dataUri] of results) {
-      if (dataUri) imgCache[u] = dataUri
-    }
     if (seq !== this.renderSeq || !this.view) return // 已有更新一轮渲染，丢弃过期结果
-    this.view.webview.html = renderReaderHtml(s, look, imgCache)
+    for (const [u, dataUri] of results) {
+      if (dataUri) void this.view.webview.postMessage({ type: 'imgReady', url: u, src: dataUri })
+    }
   }
 }

@@ -30,7 +30,9 @@ class ReaderController(private val app: NovelApp) {
         listeners.add(listener)
     }
 
-    private fun fire() = listeners.forEach { it() }
+    /** 状态广播。单个 listener 异常不中断广播（否则 UI 渲染异常会打断 openBook 等主流程——
+     *  曾导致双击章节后加载链中断、正文不出）。 */
+    private fun fire() = listeners.forEach { runCatching(it) }
 
     // ---------- 打开与跳转 ----------
 
@@ -98,10 +100,32 @@ class ReaderController(private val app: NovelApp) {
         loadChapter(index)
     }
 
+    /** 刷新目录：清 toc 缓存后重新请求章节列表，尽量保持当前阅读位置 */
+    fun refreshToc() {
+        val book = state.book ?: return
+        app.store.clearToc(book.bookUrl)
+        val keep = state.chapterIndex.takeIf { it >= 0 }
+        openBook(book, keep)
+    }
+
+    /** 清空阅读状态（正在读的书被移除时） */
+    fun clearReading() {
+        state.book = null
+        state.chapters = emptyList()
+        state.chapterIndex = -1
+        state.content = ""
+        state.lines = emptyList()
+        state.lineIndex = 0
+        state.segIndex = 0
+        state.error = null
+        state.loading = false
+        fire()
+    }
+
     fun nextChapter() = jumpTo(state.chapterIndex + 1)
     fun prevChapter() = jumpTo(state.chapterIndex - 1)
 
-    private fun loadChapter(index: Int) {
+    private fun loadChapter(index: Int, atEnd: Boolean = false) {
         val book = state.book ?: return
         val chapter = state.chapters.getOrNull(index) ?: return
         val cached = contentCache.remove(chapter.url)
@@ -109,7 +133,7 @@ class ReaderController(private val app: NovelApp) {
         state.error = null
         if (cached != null) {
             contentCache[chapter.url] = cached // LRU touch
-            applyContent(index, cached)
+            applyContent(index, cached, atEnd)
             return
         }
         fire()
@@ -118,7 +142,7 @@ class ReaderController(private val app: NovelApp) {
                 onSuccess = { content ->
                     contentCache[chapter.url] = content
                     trimCache()
-                    applyContent(index, content)
+                    applyContent(index, content, atEnd)
                 },
                 onFailure = { state.loading = false; state.error = it.message; fire() }
             )
@@ -149,12 +173,13 @@ class ReaderController(private val app: NovelApp) {
         }
     }
 
-    private fun applyContent(index: Int, content: String) {
+    private fun applyContent(index: Int, content: String, atEnd: Boolean = false) {
         state.chapterIndex = index
         state.content = content
         state.lines = displayLines(content)
-        state.lineIndex = 0
-        state.segIndex = 0
+        // atEnd：章首向上翻章时定位到上一章末行末段（对齐 VSCode resetLine:'end'）
+        state.lineIndex = if (atEnd) (state.lines.size - 1).coerceAtLeast(0) else 0
+        state.segIndex = if (atEnd) currentSegments().size - 1 else 0
         state.loading = false
         state.book?.let { app.store.updateProgress(it.bookUrl, index, state.chapters.size) }
         fire()
@@ -197,6 +222,16 @@ class ReaderController(private val app: NovelApp) {
 
     // ---------- 翻行与显示 ----------
 
+    /** 定位到指定行（面板内点击某行 / 滚轮停后的视口中心行）；不跨章，越界收敛 */
+    fun jumpLine(i: Int) {
+        if (state.lines.isEmpty()) return
+        val target = i.coerceIn(0, state.lines.size - 1)
+        if (target == state.lineIndex && state.segIndex == 0) return
+        state.lineIndex = target
+        state.segIndex = 0
+        fire()
+    }
+
     fun nextLine() {
         if (currentSegments().let { state.segIndex < it.size - 1 }) {
             state.segIndex++
@@ -228,8 +263,7 @@ class ReaderController(private val app: NovelApp) {
         }
         state.segIndex = 0
         if (AppSettings.instance.autoNextChapter && state.chapterIndex > 0) {
-            loadChapter(state.chapterIndex - 1)
-            // 章末定位：loadChapter 完成后由 UI 侧处理（简化：跳到下章首行）
+            loadChapter(state.chapterIndex - 1, atEnd = true)
         }
     }
 

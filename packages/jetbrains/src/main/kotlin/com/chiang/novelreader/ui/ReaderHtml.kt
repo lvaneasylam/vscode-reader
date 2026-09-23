@@ -10,6 +10,10 @@ object ReaderHtml {
     fun escapeHtml(s: String): String = s
         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
+    private fun escapeJsString(s: String): String = gsonJs.toJson(s)
+
+    private val gsonJs = com.google.gson.Gson()
+
     private fun fontFileUri(): String {
         val f = AppSettings.instance.fontFile.trim()
         if (f.isEmpty()) return ""
@@ -19,7 +23,12 @@ object ReaderHtml {
         return file.toURI().toString()
     }
 
-    fun render(state: ReaderController.State, imgCache: Map<String, String> = emptyMap()): String {
+    fun render(
+        state: ReaderController.State,
+        imgCache: Map<String, String> = emptyMap(),
+        /** JBCefJSQuery.inject 生成的命令调用串（cmd → 调用表达式）；为空时页面内按钮 no-op */
+        jsCalls: Map<String, String> = emptyMap()
+    ): String {
         val s = AppSettings.instance
         val book = state.book
         val title = book?.name ?: "墨遥·阅山行"
@@ -43,7 +52,7 @@ object ReaderHtml {
                             val src = imgCache[m.groupValues[1]]
                             if (src != null)
                                 """<p class="$cls" data-i="$i"><img class="review-img" src="$src" alt="段评"></p>"""
-                            else """<p class="$cls" data-i="$i">💬</p>"""
+                            else """<p class="$cls" data-i="$i" data-img="${escapeHtml(m.groupValues[1])}">💬</p>"""
                         }
                         else -> """<p class="$cls" data-i="$i">${escapeHtml(line)}</p>"""
                     }
@@ -79,7 +88,8 @@ object ReaderHtml {
   header { display: flex; align-items: center; gap: 8px; position: sticky; top: 0;
            padding: 4px 0 8px; border-bottom: 1px solid rgba(128,128,128,.35);
            background: inherit; z-index: 10; }
-  header .chapter { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header .chapter { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis;
+                    white-space: nowrap; text-align: center; }
   header .progress { opacity: .6; font-size: 12px; }
   button { border: none; background: rgba(128,128,128,.15); border-radius: 4px;
            padding: 4px 12px; cursor: pointer; }
@@ -95,6 +105,10 @@ object ReaderHtml {
   .loadbar i { display: block; height: 100%; width: 34%; background: #4b9edd;
                animation: loadbar 1.1s ease-in-out infinite; }
   @keyframes loadbar { 0% { transform: translateX(-120%) } 100% { transform: translateX(400%) } }
+  .spin { flex: none; width: 14px; height: 14px; border-radius: 50%;
+          border: 3px solid rgba(128,128,128,.25); border-top-color: #4b9edd;
+          animation: rot .8s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg) } }
   .placeholder { opacity: .6; padding: 2em 0; text-align: center; }
   .error { color: #e55; padding: 1em 0; }
 </style></head>
@@ -104,17 +118,41 @@ object ReaderHtml {
   <span class="chapter" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
   <span class="progress">${if (state.chapters.isNotEmpty()) "${state.chapterIndex + 1} / ${state.chapters.size}" else ""}</span>
   <button onclick="q('next')">→</button>
+  ${if (state.loading) """<div class="spin" title="加载中…"></div>""" else ""}
   ${if (state.loading && state.content.isNotEmpty()) """<div class="loadbar"><i></i></div>""" else ""}
 </header>
 <div id="content">$body</div>
 <script>
+  let jumpTarget = 0  // 行号经闭包传给 inject 生成的静态调用串
+  const CALLS = {}${
+        // 逐条赋值而非对象字面量内联：jsCalls 为空时（query 降级）不产生 `() => ,` 这类语法错误
+        jsCalls.entries.joinToString("") { (k, v) ->
+            "\n  CALLS[${escapeJsString(k)}] = () => $v"
+        }
+    }
   function q(cmd) {
-    try { window.cefQuery({ request: cmd }) } catch (e) { /* no-op outside JCEF */ }
+    try { const c = CALLS[cmd]; if (c) c() } catch (e) { /* no-op */ }
   }
-  function setCur(i, dir) {
+  // 点击某行 → 该行成为当前行（进度锚点，Alt+↓ 从此继续）。仅切高亮，页面不滚动。
+  document.getElementById('content').addEventListener('click', e => {
+    const p = e.target.closest('.line')
+    if (p && p.dataset.i !== undefined) { jumpTarget = +p.dataset.i; q('jump') }
+  })
+  function setCur(i, dir, noScroll) {
     document.querySelectorAll('.line.cur').forEach(n => n.classList.remove('cur'))
     const el = document.querySelector('.line[data-i="' + i + '"]')
-    if (el) { el.classList.add('cur'); el.scrollIntoView({ block: dir === 'up' ? 'end' : 'start' }) }
+    if (el) {
+      el.classList.add('cur')
+      if (!noScroll) el.scrollIntoView({ block: dir === 'up' ? 'end' : 'start' })
+    }
+  }
+  // Kotlin 侧补图完成回调：局部替换占位行 DOM，不整页重载（保滚动位置）
+  window.replaceImg = function (url, src) {
+    const el = document.querySelector('.line[data-img="' + url.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]')
+    if (el) {
+      el.removeAttribute('data-img')
+      el.innerHTML = '<img class="review-img" src="' + src + '" alt="段评">'
+    }
   }
   document.addEventListener('keydown', e => {
     if (e.altKey && e.key === 'ArrowDown') q('nextLine')

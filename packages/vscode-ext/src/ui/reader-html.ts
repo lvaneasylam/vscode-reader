@@ -46,11 +46,12 @@ export function renderReaderHtml(
         const cls = `class="line${i === state.lineIndex ? ' cur' : ''}"`
         const m = /^\[\[img:(https?:\/\/[^\]]+)\]\]$/.exec(line)
         if (m) {
-          // 段评图：代理拉取成功为 data URI；失败回退 💬 占位
+          // 段评图：缓存命中直接渲染；未命中渲染 💬 占位（带 data-img），拉取完成后
+          // 由 imgReady 消息局部替换占位——不整页重设 HTML，滚动位置不受影响
           const src = imgCache[m[1]]
           return src
             ? `<p ${cls} data-i="${i}"><img class="review-img" src="${src}" alt="段评" loading="lazy"></p>`
-            : `<p ${cls} data-i="${i}">💬</p>`
+            : `<p ${cls} data-i="${i}" data-img="${escapeHtml(m[1])}">💬</p>`
         }
           return `<p ${cls} data-i="${i}">${escapeHtml(line)}</p>`
         })
@@ -202,16 +203,33 @@ export function renderReaderHtml(
     const vscode = acquireVsCodeApi()
     document.getElementById('btn-prev').onclick = () => vscode.postMessage({ type: 'prev' })
     document.getElementById('btn-next').onclick = () => vscode.postMessage({ type: 'next' })
+    // 点击某行 → 该行成为当前行（进度锚点）。仅切高亮，页面不滚动。
+    document.getElementById('content').addEventListener('click', e => {
+      const p = e.target.closest('.line')
+      if (p && p.dataset.i !== undefined) vscode.postMessage({ type: 'jumpLine', i: +p.dataset.i, noScroll: true })
+    })
     // 翻行轻量更新：仅移动高亮并滚动跟随。长段（高于视口）向下翻滚到段首、
     // 向上翻滚到段尾——block:'center' 会让高段两头截断，产生"内容缺失"的错觉
     window.addEventListener('message', e => {
-      const i = e.data?.type === 'setCur' ? e.data.i : -1
-      if (i < 0) return
-      document.querySelectorAll('.line.cur').forEach(n => n.classList.remove('cur'))
-      const el = document.querySelector('.line[data-i="' + i + '"]')
-      if (el) {
-        el.classList.add('cur')
-        el.scrollIntoView({ block: e.data.dir === 'up' ? 'end' : 'start' })
+      const d = e.data
+      const i = d?.type === 'setCur' ? d.i : -1
+      if (i >= 0) {
+        document.querySelectorAll('.line.cur').forEach(n => n.classList.remove('cur'))
+        const el = document.querySelector('.line[data-i="' + i + '"]')
+        if (el) {
+          el.classList.add('cur')
+          if (!d.noScroll) el.scrollIntoView({ block: d.dir === 'up' ? 'end' : 'start' })
+        }
+        return
+      }
+      // 段评图补图：只替换占位行内部 DOM，页面滚动位置不动
+      if (d?.type === 'imgReady' && d.url && d.src) {
+        const sel = '.line[data-img="' + String(d.url).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]'
+        const el = document.querySelector(sel)
+        if (el) {
+          el.removeAttribute('data-img')
+          el.innerHTML = '<img class="review-img" src="' + d.src + '" alt="段评" loading="lazy">'
+        }
       }
     })
     // 整页渲染后恢复到当前行（从段首开始读）

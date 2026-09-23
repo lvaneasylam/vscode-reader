@@ -1,5 +1,6 @@
 package com.chiang.novelreader.settings
 
+import com.chiang.novelreader.NovelApp
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.panel
 import javax.swing.JComponent
@@ -20,6 +21,8 @@ class AppSettingsConfigurable : com.intellij.openapi.options.SearchableConfigura
     private val cacheSize = JBTextField()
     private val preload = JBTextField()
     private val autoNext = com.intellij.ui.components.JBCheckBox()
+    private val insecureTls = com.intellij.ui.components.JBCheckBox()
+    private val timeoutMs = JBTextField()
     private val nodePath = JBTextField()
 
     override fun getId() = "com.chiang.novelreader.settings"
@@ -39,6 +42,8 @@ class AppSettingsConfigurable : com.intellij.openapi.options.SearchableConfigura
         cacheSize.text = s.contentCacheSize.toString()
         preload.text = s.preloadChapters.toString()
         autoNext.isSelected = s.autoNextChapter
+        insecureTls.isSelected = s.insecureTLS
+        timeoutMs.text = s.requestTimeoutMs.toString()
         nodePath.text = s.nodePath
 
         return panel {
@@ -59,6 +64,8 @@ class AppSettingsConfigurable : com.intellij.openapi.options.SearchableConfigura
             }
             group("登录与网络") {
                 row("token 直登字段名：") { cell(tokenField) }
+                row("书源请求超时（毫秒）：") { cell(timeoutMs) }
+                row("信任所有 HTTPS 证书（兼容自签/旧 TLS 站点）：") { cell(insecureTls) }
             }
             group("运行时") {
                 row("Node.js 路径（空=自动探测）：") { cell(nodePath) }
@@ -81,6 +88,8 @@ class AppSettingsConfigurable : com.intellij.openapi.options.SearchableConfigura
             cacheSize.text.trim() != s.contentCacheSize.toString() ||
             preload.text.trim() != s.preloadChapters.toString() ||
             autoNext.isSelected != s.autoNextChapter ||
+            insecureTls.isSelected != s.insecureTLS ||
+            timeoutMs.text.trim() != s.requestTimeoutMs.toString() ||
             nodePath.text.trim() != s.nodePath
 
     override fun apply() {
@@ -96,6 +105,20 @@ class AppSettingsConfigurable : com.intellij.openapi.options.SearchableConfigura
         s.contentCacheSize = cacheSize.text.trim().toIntOrNull()?.coerceIn(1, 200) ?: s.contentCacheSize
         s.preloadChapters = preload.text.trim().toIntOrNull()?.coerceIn(0, 20) ?: s.preloadChapters
         s.autoNextChapter = autoNext.isSelected
+        val tlsChanged = insecureTls.isSelected != s.insecureTLS
+        val timeoutChanged = (timeoutMs.text.trim().toIntOrNull() ?: s.requestTimeoutMs) != s.requestTimeoutMs
+        s.insecureTLS = insecureTls.isSelected
+        s.requestTimeoutMs = timeoutMs.text.trim().toIntOrNull()?.coerceIn(3000, 180000) ?: s.requestTimeoutMs
         s.nodePath = nodePath.text.trim()
+        // 网络选项变化：后台下发 sidecar（运行时即时生效，无需重启 IDE）
+        if (tlsChanged || timeoutChanged) {
+            NovelApp.instance.execute({}) {
+                NovelApp.instance.rpc(
+                    "setOption",
+                    mapOf("insecureTLS" to s.insecureTLS, "timeoutMs" to s.requestTimeoutMs)
+                )
+                null
+            }
+        }
     }
 }

@@ -23,6 +23,7 @@ class AppSettings : PersistentStateComponent<AppSettings> {
     var contentCacheSize: Int = 20
     var preloadChapters: Int = 3
     var requestTimeoutMs: Int = 15000
+    var insecureTLS: Boolean = true
     /** 按书源名分组的登录凭据（loginUi 表单字段） */
     var loginInfo: MutableMap<String, MutableMap<String, String>> = mutableMapOf()
 
@@ -42,6 +43,7 @@ class AppSettings : PersistentStateComponent<AppSettings> {
         contentCacheSize = state.contentCacheSize
         preloadChapters = state.preloadChapters
         requestTimeoutMs = state.requestTimeoutMs
+        insecureTLS = state.insecureTLS
         loginInfo = state.loginInfo
     }
 

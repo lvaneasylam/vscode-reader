@@ -185,7 +185,23 @@ export class ReaderController implements vscode.Disposable {
    * 沙盒（自动携带 cookieJar）拉取 SVG/图片并转 data URI 供面板渲染。
    * 失败返回 null（面板回退 💬 占位）。
    */
+  /** 段评图缓存（url → data URI；null = 拉取失败也缓存，避免反复请求） */
+  private readonly imgCache = new Map<string, string | null>()
+
+  /** 只读缓存命中（不触发网络），供面板首屏直接带图渲染 */
+  peekImage(url: string): string | undefined {
+    return this.imgCache.get(url) ?? undefined
+  }
+
   async fetchChapterImage(url: string): Promise<string | null> {
+    const hit = this.imgCache.get(url)
+    if (hit !== undefined) return hit
+    const dataUri = await this.fetchChapterImageUncached(url)
+    this.imgCache.set(url, dataUri)
+    return dataUri
+  }
+
+  private async fetchChapterImageUncached(url: string): Promise<string | null> {
     const { book } = this.state
     if (!book) return null
     const source = this.getSource(book.origin)
@@ -256,6 +272,16 @@ export class ReaderController implements vscode.Disposable {
     if (this.autoNextChapter() && this.state.chapterIndex > 0) {
       await this.loadChapter(this.state.chapterIndex - 1, { resetLine: 'end' })
     }
+  }
+
+  /** 定位到指定行（面板内点击某行 / 滚轮停后的视口中心行）；不跨章，越界收敛到边界 */
+  jumpLine(i: number): void {
+    if (this.state.lines.length === 0) return
+    const target = Math.max(0, Math.min(i, this.state.lines.length - 1))
+    if (target === this.state.lineIndex && this.state.segIndex === 0) return
+    this.state.lineIndex = target
+    this.state.segIndex = 0
+    this.emitter.fire()
   }
 
   private async loadChapter(index: number, opts: { resetLine?: true | 'end' } = {}): Promise<void> {

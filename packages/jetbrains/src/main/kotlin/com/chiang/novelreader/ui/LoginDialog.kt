@@ -48,12 +48,12 @@ class LoginDialog(private val app: NovelApp, project: Project?) : DialogWrapper(
                 add(JLabel("密码：")); add(passwordField)
             }, BorderLayout.NORTH)
         })
-        tabbed.addTab("token 直登", JPanel(BorderLayout(6, 6)).apply {
+        tabbed.addTab("凭据直登", JPanel(BorderLayout(6, 6)).apply {
             add(JPanel(BorderLayout(6, 6)).apply {
-                add(JLabel("token（可带 字段名= 前缀）："), BorderLayout.NORTH)
+                add(JLabel("凭据（多字段分号分隔：token=…; uid=…; session=…）："), BorderLayout.NORTH)
                 add(tokenField, BorderLayout.CENTER)
             }, BorderLayout.CENTER)
-            add(JLabel("默认写入字段 ${AppSettings.instance.tokenFieldName}=（设置可改）"), BorderLayout.SOUTH)
+            add(JLabel("不带字段名的值写入默认字段 ${AppSettings.instance.tokenFieldName}=（设置可改）"), BorderLayout.SOUTH)
         })
         tabbed.addTab("Cookie", JPanel(BorderLayout(6, 6)).apply {
             add(JLabel("粘贴浏览器整行 Cookie："), BorderLayout.NORTH)
@@ -88,25 +88,38 @@ class LoginDialog(private val app: NovelApp, project: Project?) : DialogWrapper(
         val account = accountField.text.trim()
         val pwd = String(passwordField.password)
 
-        app.execute(onDone = { res: Result<Pair<Boolean, String>> ->
-            val (ok, msg) = res.getOrElse { false to (it.message ?: "失败") }
+        app.execute(onDone = { res: Result<Triple<Boolean, String, String?>> ->
+            val (ok, msg, accKey) = res.getOrElse { Triple(false, it.message ?: "失败", null) }
+            // 凭据记忆回 EDT 写（PersistentStateComponent 不应在后台线程改）
+            if (accKey != null) {
+                AppSettings.instance.loginInfo.getOrPut(source.name) { mutableMapOf() }[accKey] = account
+            }
             done(ok, msg)
         }) {
             val srcJson = source.json
             // 通道判定：token > cookie > 账号表单
             when {
                 token.isNotEmpty() -> {
-                    val m = Regex("^([A-Za-z_][A-Za-z0-9_-]*)=(.+)$").find(token)
-                    val field = m?.groupValues?.get(1) ?: AppSettings.instance.tokenFieldName
-                    val value = m?.groupValues?.get(2) ?: token
-                    val pair = "$field=$value"
+                    // 多字段凭据：分号分隔多组「字段名=值」，裸值写入配置的默认字段
+                    val defaultField = AppSettings.instance.tokenFieldName
+                    val pairs = token.split(';').map { it.trim() }.filter { it.isNotEmpty() }.mapNotNull { part ->
+                        val m = Regex("^([A-Za-z_][A-Za-z0-9_-]*)=(.+)$").find(part)
+                        val f = m?.groupValues?.get(1) ?: defaultField
+                        val v = (m?.groupValues?.get(2) ?: part).trim()
+                        if (v.length < 8 || Regex("[;,\\s\\x00-\\x1f]").containsMatchIn(v) ||
+                            !Regex("^[A-Za-z_][A-Za-z0-9_-]*$").matches(f)
+                        ) error("字段 $f 的值不合法（长度 ≥8 且不含空格/分号/逗号）")
+                        f to v
+                    }.distinctBy { it.first }
+                    if (pairs.isEmpty()) return@execute Triple(false, "未解析到凭据字段", null)
+                    val pair = pairs.joinToString("; ") { "${it.first}=${it.second}" }
                     val probe =
                         "typeof setAllCookies === 'function' ? (setAllCookies(${gson.toJson(pair)}), 'ok') : 'nofn'"
                     val out = app.rpc("runJs", mapOf("source" to srcJson, "code" to probe))
                         .getAsJsonPrimitive("result")?.takeIf { it.isString }?.asString
                     if (out == "ok") {
                         app.rpc("flush", mapOf("source" to srcJson))
-                        true to "✅ token 已写入全部线路（字段 $field）"
+                        Triple(true, "✅ 凭据已写入全部线路（${pairs.size} 个字段）", null)
                     } else {
                         // 兜底：写源根域 cookieJar
                         val url = srcJson.getAsJsonPrimitive("bookSourceUrl").asString
@@ -115,7 +128,7 @@ class LoginDialog(private val app: NovelApp, project: Project?) : DialogWrapper(
                             mapOf("source" to srcJson, "code" to "java.setCookie(${gson.toJson(url)}, ${gson.toJson(pair)})")
                         )
                         app.rpc("flush", mapOf("source" to srcJson))
-                        true to "token 已写入源根域（字段 $field）"
+                        Triple(true, "凭据已写入源根域（${pairs.size} 个字段）", null)
                     }
                 }
                 cookie.isNotEmpty() -> {
@@ -125,11 +138,11 @@ class LoginDialog(private val app: NovelApp, project: Project?) : DialogWrapper(
                         mapOf("source" to srcJson, "code" to "java.setCookie(${gson.toJson(url)}, ${gson.toJson(cookie)})")
                     )
                     app.rpc("flush", mapOf("source" to srcJson))
-                    true to "Cookie 已保存"
+                    Triple(true, "Cookie 已保存", null)
                 }
                 else -> {
                     if (account.isEmpty() || pwd.isEmpty()) {
-                        return@execute false to "请输入账号密码（或用 token 直登）"
+                        return@execute Triple(false, "请输入账号密码（或用 token 直登）", null)
                     }
                     // loginUi 字段名启发（邮箱/账号 → 账号键；密码 → 密码键）
                     val fields = app.rpc("getLoginUi", mapOf("source" to srcJson))
@@ -142,8 +155,7 @@ class LoginDialog(private val app: NovelApp, project: Project?) : DialogWrapper(
                         "runLogin",
                         mapOf("source" to srcJson, "data" to mapOf(accKey to account, pwdKey to pwd))
                     ).getAsJsonPrimitive("result")?.takeIf { it.isString }?.asString
-                    AppSettings.instance.loginInfo.getOrPut(source.name) { mutableMapOf() }[accKey] = account
-                    (out == "true") to "登录返回：${(out ?: "").take(120)}"
+                    Triple(out == "true", "登录返回：${(out ?: "").take(120)}", accKey)
                 }
             }
         }

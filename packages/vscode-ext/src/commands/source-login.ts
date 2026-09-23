@@ -44,7 +44,7 @@ export async function setSourceCookie(store: Store, source?: BookSource): Promis
 
   const actions: Array<{ label: string; action: 'set' | 'token' | 'open' | 'clear' }> = [
     { label: '$(key) 设置 Cookie（从浏览器复制粘贴）', action: 'set' },
-    { label: '$(plug) 输入 token 登录（字段名可配，适用 token 型书源）', action: 'token' }
+    { label: '$(plug) 输入凭据登录（token/uid/session 等多字段，分号分隔一次配齐）', action: 'token' }
   ]
   if (target.loginUrl && /^https?:\/\//i.test(target.loginUrl.trim())) {
     actions.push({ label: '$(link) 打开登录页（浏览器）', action: 'open' })
@@ -84,8 +84,8 @@ export async function setSourceCookie(store: Store, source?: BookSource): Promis
 }
 
 /**
- * token 直接登录（适用 token 型书源）：
- * cookie 字段名取自配置 novelReader.tokenFieldName（默认 token），输入 "字段名=值" 可临时覆盖。
+ * 凭据直接登录（适用 token/Cookie 型书源，支持多字段）：
+ * 输入分号分隔的多组「字段名=值」（无 = 的段写入配置的默认字段 tokenFieldName）。
  * 首选复用书源自己的 setAllCookies（它知道所有线路域名）；无此函数时兜底写源根域。
  * 成功后清除 headerMap.Cookie —— http 层已有 Cookie 会完全遮蔽 cookieJar（http.ts）。
  */
@@ -94,25 +94,33 @@ async function tokenLogin(store: Store, source: BookSource): Promise<void> {
     .getConfiguration('novelReader')
     .get<string>('tokenFieldName')?.trim() || 'token'
   const input = await vscode.window.showInputBox({
-    prompt: `粘贴登录 token（默认写入字段 ${defaultField}=；也可输入完整 "字段名=值"，从浏览器 Cookie 或其他设备获取）`,
-    placeHolder: `例：${defaultField}=eyJhbGciOi…`,
+    prompt: `粘贴登录凭据：分号分隔可一次写多个字段（不带字段名的值写入 ${defaultField}=）`,
+    placeHolder: `例：${defaultField}=eyJhbGciOi…; uid=123; session=xyz`,
     ignoreFocusOut: true
   })
   if (input === undefined) return
-  // 输入形态 "字段名=值" 优先，否则用配置的字段名
-  const m = /^([A-Za-z_][A-Za-z0-9_-]*)=(.+)$/.exec(input.trim())
-  const field = m ? m[1] : defaultField
-  const token = (m ? m[2] : input.trim()).trim()
-  // 校验：防 Cookie 头注入（; 分隔多个 cookie）与格式污染
-  if (token.length < 8 || /[;,\s\x00-\x1f]/.test(token) || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(field)) {
-    void vscode.window.showErrorMessage('token 格式不合法（长度 ≥8 且不含空格/分号/逗号/控制字符）')
+  // 多字段解析：分号分隔；「字段名=值」用其字段名，裸值用默认字段名
+  const pairs: Array<[string, string]> = []
+  for (const part of input.split(';').map(p => p.trim()).filter(Boolean)) {
+    const m = /^([A-Za-z_][A-Za-z0-9_-]*)=(.+)$/.exec(part)
+    const field = m ? m[1] : defaultField
+    const value = (m ? m[2] : part).trim()
+    // 校验：防 Cookie 头注入与格式污染
+    if (value.length < 8 || /[;,\s\x00-\x1f]/.test(value) || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(field)) {
+      void vscode.window.showErrorMessage(`字段 ${field} 的值不合法（长度 ≥8 且不含空格/分号/逗号/控制字符）`)
+      return
+    }
+    if (!pairs.some(([f]) => f === field)) pairs.push([field, value])
+  }
+  if (pairs.length === 0) {
+    void vscode.window.showErrorMessage('未解析到凭据字段')
     return
   }
-  const pair = `${field}=${token}`
+  const pair = pairs.map(([f, v]) => `${f}=${v}`).join('; ')
 
   const wb = createWebBook(source)
   const via = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: `正在写入 token（${source.bookSourceName}）…` },
+    { location: vscode.ProgressLocation.Notification, title: `正在写入凭据（${source.bookSourceName}，${pairs.length} 个字段）…` },
     async () => {
       // 书源知道全部线路域名 → 优先复用其逻辑写 cookieJar
       const probe = `typeof setAllCookies === 'function' ? (setAllCookies(${JSON.stringify(
@@ -130,7 +138,7 @@ async function tokenLogin(store: Store, source: BookSource): Promise<void> {
         }
         return 'all-cookies'
       } catch (e) {
-        void vscode.window.showErrorMessage(`写入 token 失败：${(e as Error).message}`)
+        void vscode.window.showErrorMessage(`写入凭据失败：${(e as Error).message}`)
         return 'error'
       }
     }
@@ -146,9 +154,9 @@ async function tokenLogin(store: Store, source: BookSource): Promise<void> {
   // 有 getToken 的源回读验证
   const check = await wb.runJs("typeof getToken === 'function' ? String(getToken()) : ''")
   if (check && check !== 'null' && check.trim().length > 0) {
-    void vscode.window.showInformationMessage(`✅ token 已生效（${check.slice(0, 8)}…），搜索/阅读即带登录态`)
+    void vscode.window.showInformationMessage(`✅ 凭据已生效（${pairs.length} 字段，${check.slice(0, 8)}…），搜索/阅读即带登录态`)
   } else {
-    void vscode.window.showInformationMessage('token 已写入，可搜索一本书验证登录态是否生效')
+    void vscode.window.showInformationMessage('凭据已写入，可搜索一本书验证登录态是否生效')
   }
 }
 
